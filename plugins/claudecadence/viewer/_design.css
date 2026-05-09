@@ -2322,3 +2322,52 @@ mark {
   width: 1px;
   background: var(--neutral-300);
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Multi-session layout (v1.3) — N parallel sessions in one project
+   render as side-by-side columns. Built on the State B `.sessions-2col`
+   token base; the JS sets --col-count to N so it grids cleanly.
+   ────────────────────────────────────────────────────────────────── */
+.sessions-multicol {
+  display: grid;
+  grid-template-columns: repeat(var(--col-count, 2), minmax(280px, 1fr));
+  column-gap: 28px;
+  align-items: start;
+  width: 100%;
+}
+.sessions-multicol .session-col {
+  min-width: 0;
+}
+.sessions-multicol .session-col-head {
+  border-bottom: 1px solid var(--soft);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sessions-multicol .session-col-head h2 {
+  font-family: var(--font-serif);
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.sessions-multicol .session-col-head .id {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+}
+.sessions-multicol .session-col-head .stats {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+}
+.sessions-multicol .session-col-head .stats strong { color: var(--ink); font-weight: 500; }
+
+/* In multi-col layout, each turn's rail isn't useful (no shared trunk
+   between sessions) — drop the rail column, keep just the card. */
+.sessions-multicol .turn { grid-template-columns: 1fr; }
+.sessions-multicol .turn .rail { display: none; }

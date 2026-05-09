@@ -34,10 +34,11 @@
     'decision':    'var(--apricot-600)',
   };
 
-  let activeStatus = 'all';
-  let activeAgent  = 'all';
-  let activeMode   = 'full';      // full · summary · compact
-  let searchQuery  = '';
+  let activeStatus  = 'all';
+  let activeAgent   = 'all';
+  let activeSession = 'all';      // v1.3: session filter
+  let activeMode    = 'full';      // full · summary · compact · events
+  let searchQuery   = '';
 
   // ─────────── DOM helpers ───────────
   function el(tag, cls, text) {
@@ -642,8 +643,9 @@
   // ─────────── Filters ───────────
   function buildFilters() {
     const nodes = window.TIMELINE_NODES || [];
-    const statusBox = document.getElementById('filter-status');
-    const agentBox  = document.getElementById('filter-agent');
+    const statusBox  = document.getElementById('filter-status');
+    const agentBox   = document.getElementById('filter-agent');
+    const sessionBox = document.getElementById('filter-session');
 
     const statusCounts = { all: nodes.length };
     nodes.forEach(n => {
@@ -683,17 +685,83 @@
       chip.addEventListener('click', () => { activeAgent = a; render(); });
       agentBox.appendChild(chip);
     });
+
+    // Session filter chips — only render when there's more than one session.
+    const sessionCounts = { all: nodes.length };
+    nodes.forEach(n => {
+      const s = n.session || 'main';
+      sessionCounts[s] = (sessionCounts[s] || 0) + 1;
+    });
+    const distinctSessions = Object.keys(sessionCounts).filter(k => k !== 'all');
+    if (sessionBox) {
+      if (distinctSessions.length > 1) {
+        sessionBox.style.display = '';
+        sessionBox.innerHTML = '<span class="group-label">session</span>';
+        Object.keys(sessionCounts).forEach(s => {
+          const chip = el('span','chip' + (s === activeSession ? ' is-active' : ''));
+          if (s !== 'all') chip.appendChild(el('span','dot'));
+          chip.appendChild(document.createTextNode(' ' + s + ' '));
+          chip.appendChild(el('span','count', sessionCounts[s]));
+          chip.addEventListener('click', () => { activeSession = s; render(); });
+          sessionBox.appendChild(chip);
+        });
+      } else {
+        sessionBox.style.display = 'none';
+        sessionBox.innerHTML = '';
+      }
+    }
   }
 
   function matches(n) {
     if (activeStatus !== 'all' && n.status !== activeStatus) return false;
     if (activeAgent  !== 'all' && n.agent  !== activeAgent)  return false;
+    if (activeSession !== 'all' && (n.session || 'main') !== activeSession) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const hay = ((n.title||'') + ' ' + (n.summary||'') + ' ' + (n.tags||[]).join(' ')).toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
+  }
+
+  // ─────────── Multi-session render (v1.3) ───────────
+  function renderMultiSession(root, nodes, sessionIds) {
+    const wrap = el('div','sessions-multicol');
+    wrap.style.setProperty('--col-count', sessionIds.length);
+    // Sort columns by earliest activity so the oldest session shows leftmost.
+    const byFirstTs = sessionIds.slice().sort((a, b) => {
+      const ta = nodes.find(n => (n.session || 'main') === a)?.ts || '';
+      const tb = nodes.find(n => (n.session || 'main') === b)?.ts || '';
+      return ta.localeCompare(tb);
+    });
+    byFirstTs.forEach(sid => {
+      const sNodes = nodes.filter(n => (n.session || 'main') === sid);
+      const col = el('div','session-col');
+      col.dataset.session = sid;
+      const head = el('div','session-col-head');
+      const left = el('div');
+      const h2 = el('h2'); h2.textContent = `session ${sid}`;
+      left.appendChild(h2);
+      const idEl = el('div','id'); idEl.textContent = `${sNodes.length} events`;
+      left.appendChild(idEl);
+      const stats = el('div','stats');
+      const turnsHere = new Set(sNodes.map(n => n.turn_id).filter(Boolean));
+      const failures = sNodes.filter(n => n.status === 'failed').length;
+      stats.innerHTML = `<strong>${turnsHere.size || '—'}</strong> turns · <strong>${failures}</strong> fails`;
+      head.appendChild(left);
+      head.appendChild(stats);
+      col.appendChild(head);
+      // Render turns inside the column.
+      const ol = document.createElement('ol');
+      ol.className = 'timeline';
+      ol.style.padding = '0';
+      ol.style.margin = '0';
+      ol.style.listStyle = 'none';
+      groupIntoTurns(sNodes).forEach(t => ol.appendChild(renderTurn(t)));
+      col.appendChild(ol);
+      wrap.appendChild(col);
+    });
+    root.appendChild(wrap);
   }
 
   // ─────────── Turn grouping (v1.1) ───────────
@@ -942,8 +1010,16 @@
       // Raw event log: each node as its own card (v1.0 behavior).
       visible.forEach(n => root.appendChild(renderNode(n)));
     } else {
-      const turns = groupIntoTurns(visible);
-      turns.forEach(t => root.appendChild(renderTurn(t)));
+      // v1.3: detect parallel sessions in the same project. If >1 distinct
+      // session id is present (and the user hasn't filtered to a single one),
+      // render as side-by-side columns. Otherwise single-column turn cards.
+      const sessionIds = Array.from(new Set(visible.map(n => n.session || 'main')));
+      if (sessionIds.length > 1 && activeSession === 'all') {
+        renderMultiSession(root, visible, sessionIds);
+      } else {
+        const turns = groupIntoTurns(visible);
+        turns.forEach(t => root.appendChild(renderTurn(t)));
+      }
     }
 
     // header counts
