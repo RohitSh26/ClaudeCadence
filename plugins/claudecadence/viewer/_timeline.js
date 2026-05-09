@@ -708,6 +708,43 @@
     return n.kind === 'response' && n.agent === 'orchestrator' && (n.tags || []).indexOf('response') !== -1;
   }
   function groupIntoTurns(nodes) {
+    // v1.2: prefer node.turn_id (deterministic). For older nodes that
+    // pre-date turn_id, fall back to the v1.1 prompt-boundary heuristic.
+    const haveTurnIds = nodes.some(n => n && n.turn_id);
+    if (haveTurnIds) return groupByTurnId(nodes);
+    return groupByHeuristic(nodes);
+  }
+
+  function groupByTurnId(nodes) {
+    const buckets = new Map();          // turn_id -> turn obj
+    const orphans = { prompt: null, children: [], response: null, ts: null };
+    nodes.forEach(n => {
+      const tid = n.turn_id;
+      if (!tid) {
+        if (orphans.ts == null) orphans.ts = n.ts;
+        orphans.children.push(n);
+        return;
+      }
+      let t = buckets.get(tid);
+      if (!t) {
+        t = { id: tid, prompt: null, children: [], response: null, ts: n.ts };
+        buckets.set(tid, t);
+      }
+      if (isPromptNode(n)) t.prompt = n;
+      else if (isResponseNode(n)) t.response = n;
+      else t.children.push(n);
+      // Earliest ts wins as the turn ts (so we sort cleanly).
+      if (!t.ts || (n.ts && n.ts < t.ts)) t.ts = n.ts;
+    });
+    const turns = [];
+    if (orphans.children.length) turns.push(orphans);
+    Array.from(buckets.values())
+      .sort((a, b) => (a.ts || '').localeCompare(b.ts || ''))
+      .forEach(t => turns.push(t));
+    return turns;
+  }
+
+  function groupByHeuristic(nodes) {
     const turns = [];
     let current = null;
     nodes.forEach(n => {
@@ -721,11 +758,10 @@
       } else if (current) {
         current.children.push(n);
       } else {
-        // Orphan — no prompt yet (e.g. SessionStart). Make a headerless turn.
         turns.push({ prompt: null, children: [n], response: null, ts: n.ts });
       }
     });
-    if (current) turns.push(current);  // turn in progress (no response yet)
+    if (current) turns.push(current);
     return turns;
   }
 
@@ -902,6 +938,9 @@
     root.innerHTML = '';
     if (!visible.length) {
       root.appendChild(el('div','empty','No nodes match the current filters.'));
+    } else if (activeMode === 'events') {
+      // Raw event log: each node as its own card (v1.0 behavior).
+      visible.forEach(n => root.appendChild(renderNode(n)));
     } else {
       const turns = groupIntoTurns(visible);
       turns.forEach(t => root.appendChild(renderTurn(t)));

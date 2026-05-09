@@ -39,6 +39,10 @@ DATA_DIR = CADENCE_DIR / "data"
 NODES_JS = DATA_DIR / "nodes.js"
 VIEWER_SOURCE = PLUGIN_ROOT / "viewer"
 
+# v1.2: per-turn grouping. UserPromptSubmit writes a new turn_id here;
+# every subsequent hook reads it and tags its node. Stop clears it.
+CURRENT_TURN_FILE = CADENCE_DIR / ".current_turn.txt"
+
 # Hub: per-user registry of all cadences across projects (v1.0).
 HUB_DIR = Path(os.environ.get("CLAUDECADENCE_HUB_DIR") or (Path.home() / ".claude" / "cadence"))
 REGISTRY_JSON = HUB_DIR / "registry.json"
@@ -150,6 +154,37 @@ def new_id(seq: int, ts: str) -> str:
     return f"n_{seq:04d}_{safe_ts}_{rand}"
 
 
+def current_turn_id() -> str | None:
+    """Read the open turn id (if any) from the state file. None = no open turn."""
+    try:
+        if CURRENT_TURN_FILE.exists():
+            t = CURRENT_TURN_FILE.read_text().strip()
+            return t or None
+    except OSError:
+        pass
+    return None
+
+
+def begin_turn() -> str:
+    """Open a new turn — write a fresh id, return it."""
+    tid = "t_" + uuid.uuid4().hex[:10]
+    CADENCE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        CURRENT_TURN_FILE.write_text(tid)
+    except OSError:
+        pass
+    return tid
+
+
+def end_turn() -> None:
+    """Close the current turn (clear the file). Stop calls this."""
+    try:
+        if CURRENT_TURN_FILE.exists():
+            CURRENT_TURN_FILE.unlink()
+    except OSError:
+        pass
+
+
 def append_node(node: dict) -> None:
     nodes = load_nodes()
     seq = len(nodes) + 1
@@ -163,6 +198,11 @@ def append_node(node: dict) -> None:
     node.setdefault("blocks", [])
     if "parents" not in node:
         node["parents"] = [nodes[-1]["id"]] if nodes else []
+    # v1.2: attach turn_id if a turn is open. Don't override a pre-set one.
+    if "turn_id" not in node:
+        tid = current_turn_id()
+        if tid:
+            node["turn_id"] = tid
     nodes.append(node)
     save_nodes(nodes)
 
@@ -187,6 +227,10 @@ def handle_user_prompt(payload: dict) -> dict | None:
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         return None
+    # v1.2: open a fresh turn — every event after this attaches to it
+    # until Stop closes it. Done BEFORE we build the node so the prompt
+    # itself also carries the new turn_id.
+    tid = begin_turn()
     # Slash commands look like "/foo bar" — keep them but tag distinctively.
     is_slash = prompt.startswith("/")
     title_line = prompt.split("\n", 1)[0]
@@ -205,6 +249,7 @@ def handle_user_prompt(payload: dict) -> dict | None:
         "summary": summary,
         "tags": ["prompt"] + (["slash"] if is_slash else []),
         "session": payload.get("session_id", "main")[:12],
+        "turn_id": tid,
         "blocks": blocks,
     }
 
@@ -428,14 +473,18 @@ def _last_assistant_text(transcript_path: str | None) -> str | None:
 
 def handle_stop(payload: dict) -> dict | None:
     session_id = payload.get("session_id", "main")[:12]
+    # Capture the turn id BEFORE clearing — the response node must still belong
+    # to the closing turn. end_turn() is called at the bottom.
+    tid = current_turn_id()
     text = _last_assistant_text(payload.get("transcript_path"))
+    node: dict | None
     if text:
         first_line = text.split("\n", 1)[0].strip()
         title = (first_line[:96] + "…") if len(first_line) > 96 else (first_line or "Claude responded")
         summary = text[:160].replace("\n", " ").strip()
         if len(text) > 160:
             summary += "…"
-        return {
+        node = {
             "agent": "orchestrator",
             "kind": "response",
             "status": "completed",
@@ -445,16 +494,23 @@ def handle_stop(payload: dict) -> dict | None:
             "session": session_id,
             "blocks": [{"type": "markdown", "value": text[:8000]}],
         }
-    # Fallback when transcript isn't readable — better than nothing.
-    return {
-        "agent": "orchestrator",
-        "kind": "response",
-        "status": "completed",
-        "title": "Claude responded",
-        "summary": "(transcript not readable; install path or permission issue)",
-        "tags": ["response", "stop"],
-        "session": session_id,
-    }
+    else:
+        # Fallback when transcript isn't readable — better than nothing.
+        node = {
+            "agent": "orchestrator",
+            "kind": "response",
+            "status": "completed",
+            "title": "Claude responded",
+            "summary": "(transcript not readable; install path or permission issue)",
+            "tags": ["response", "stop"],
+            "session": session_id,
+        }
+    # Stamp the closing turn id, then close the turn so subsequent
+    # orphan events (e.g. background hooks) don't accrete to it.
+    if tid:
+        node["turn_id"] = tid
+    end_turn()
+    return node
 
 
 HANDLERS = {

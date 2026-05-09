@@ -4,7 +4,10 @@
 
 ClaudeCadence is a Claude Code plugin that gives you a **live HTML timeline** of your sessions — every tool call, every sub-agent fork, every PR opened, every decision made — rendered as an expandable, filterable, fork-aware vertical timeline you open in your browser.
 
-It runs entirely on Claude Code's hook system, so it adds **zero extra LLM cost**. The plugin watches what Claude Code is already doing and writes timeline nodes as a side effect. You open the viewer in a browser tab, work normally, watch it fill itself.
+> **🔋 Zero extra LLM cost — guaranteed.**
+> ClaudeCadence runs **entirely** on Claude Code's hook system. Hooks are shell scripts that fire on lifecycle events; they never call an LLM. The plugin doesn't send a single extra token to Anthropic, doesn't use your API key, doesn't add anything to your existing Claude Code bill. **No tokens. No subscription. No telemetry. No hosted services.** It only watches what Claude Code is already doing and writes the timeline as a side effect.
+
+You open the viewer in a browser tab, work normally, watch it fill itself.
 
 ```
 $ /plugin marketplace add RohitSh26/ClaudeCadence
