@@ -2,12 +2,17 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "claudecadence",
   "description": "Live HTML timeline viewer for Claude Code sessions. Hooks-driven, zero extra LLM cost.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": {
     "name": "Rohit Sharma"
   },
   "homepage": "https://github.com/RohitSh26/ClaudeCadence",
   "repository": "https://github.com/RohitSh26/ClaudeCadence",
   "license": "MIT",
-  "keywords": ["timeline", "viewer", "multi-agent", "observability"]
+  "keywords": [
+    "timeline",
+    "viewer",
+    "multi-agent",
+    "observability"
+  ]
 }

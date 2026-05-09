@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
   "name": "claudecadence",
-  "description": "ClaudeCadence — see the rhythm of your multi-agent Claude Code sessions.",
+  "description": "ClaudeCadence \u2014 see the rhythm of your multi-agent Claude Code sessions.",
   "owner": {
     "name": "Rohit Sharma"
   },
@@ -11,7 +11,14 @@
       "source": "./plugins/claudecadence",
       "description": "Live HTML timeline viewer for Claude Code sessions. Hooks-driven, zero extra LLM cost.",
       "category": "observability",
-      "keywords": ["timeline", "viewer", "multi-agent", "observability", "hooks", "html"],
+      "keywords": [
+        "timeline",
+        "viewer",
+        "multi-agent",
+        "observability",
+        "hooks",
+        "html"
+      ],
       "homepage": "https://github.com/RohitSh26/ClaudeCadence",
       "repository": "https://github.com/RohitSh26/ClaudeCadence",
       "license": "MIT"

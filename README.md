@@ -9,7 +9,7 @@ It runs entirely on Claude Code's hook system, so it adds **zero extra LLM cost*
 ```
 $ /plugin marketplace add RohitSh26/ClaudeCadence
 $ /plugin install claudecadence@claudecadence
-$ /claudecadence:serve   # opens http://localhost:4173/
+$ /claudecadence:home   # cross-project home, opens http://localhost:4173/
 ```
 
 That's it. Now go work in Claude Code. The timeline grows in the background.
@@ -18,13 +18,13 @@ That's it. Now go work in Claude Code. The timeline grows in the background.
 
 ## Why this exists
 
-Multi-agent Claude Code sessions are powerful, but the chat-and-terminal log isn't built for them. When you fork three sub-agents in parallel, scrolling chat doesn't show you who's doing what. When a session runs for hours and you scroll back to find "where did the decision happen," the answer is somewhere in a haystack.
+Multi-agent Claude Code sessions are powerful, but the chat-and-terminal log isn't built for them. When three sub-agents fork in parallel, scrolling chat doesn't show what's happening. When a session runs for hours and you scroll back to find "where did the decision happen," the answer is somewhere in a haystack.
 
 ClaudeCadence is the inverse view: a vertical timeline with branching lanes for parallel sub-agents, color-coded by agent, with rich expandable nodes that hold tables, code, decisions, charts. The structure of the work made visible.
 
 ## Status
 
-**v0.1 — initial public release.** Hooks fire correctly, the viewer renders, slash commands work. Visual polish is solid (Geist + Apricot, restrained design). Some chart block types are stubs that will fill in over the next few releases. Issues + feature requests welcome at [github.com/RohitSh26/ClaudeCadence/issues](https://github.com/RohitSh26/ClaudeCadence/issues).
+**v1.0 — initial public release.** Hooks fire correctly, the per-project viewer renders with auto-refresh, the cross-project home page shows every cadence with active / stale / inactive status. Issues + feature requests welcome at [github.com/RohitSh26/ClaudeCadence/issues](https://github.com/RohitSh26/ClaudeCadence/issues).
 
 ## Install
 
@@ -40,18 +40,32 @@ That's the canonical install — Claude Code clones this repo into its plugin ca
 ## Use
 
 ```
-/claudecadence:serve     # start the local viewer + open browser
-/claudecadence:status    # how many nodes recorded so far
+/claudecadence:home      # cross-project home page (every cadence, with status)
+/claudecadence:serve     # this project's full timeline
+/claudecadence:status    # how many nodes recorded so far in this project
 /claudecadence:stop      # stop the local server
 ```
 
-That's it. The hooks handle the rest. **You don't have to remember to log anything** — the timeline just fills itself as you work.
+That's it. The hooks handle the rest. **You don't have to remember to log anything** — the timeline just fills itself as you work, and the viewer auto-refreshes every 5 seconds while you watch.
 
-If you want richer narrative on key milestones (decisions, PR merges, customer signals), add a single line to your project's `CLAUDE.md`:
+## Two surfaces
 
-> When a meaningful milestone happens (PR merged, decision made, sub-agent dispatched, blocker discovered), append a node to `.claude/cadence/data/nodes.js` via the append script.
+### The home (`/claudecadence:home`)
 
-This is opt-in and costs a few tokens per session. Without it, hooks alone give you a complete event log.
+Every Claude Code session you've ever opened with this plugin enabled is registered as a "cadence." The home page lists them all with:
+
+- **Status pill** — *active* (last activity within 5 min) · *stale* (within 24 h) · *inactive* (older).
+- **Last activity** (relative timestamp) and **node count**.
+- **Filter by status**, **search by name or path**.
+- Click any cadence → drops you into that project's full timeline.
+
+Useful when you're juggling multiple projects and want to know which sessions are still hot.
+
+### The per-project timeline (`/claudecadence:serve`)
+
+The full vertical timeline for one project. Each node is a moment in the session: tool calls, decisions, sub-agent forks, PRs, CI events. Compact when collapsed, rich when expanded (with markdown · tables · code · checklists · decisions · charts · key-value blocks). Filter by status / agent, search across titles + summaries, switch between full / summary / compact view modes, expand-all / collapse-all.
+
+The viewer **auto-refreshes every 5 seconds** — no manual reload needed once the tab is open.
 
 ## What gets recorded
 
@@ -79,7 +93,7 @@ Other Bash commands, file reads, edits, etc. are intentionally **not** recorded 
 
 ## Where data lives
 
-Per-project, never global:
+Per-project (the timeline for one project):
 
 ```
 your-project/
@@ -89,19 +103,27 @@ your-project/
         ├── _design.css
         ├── _timeline.js
         └── data/
-            └── nodes.js         # your timeline data
+            └── nodes.js        # this project's timeline data
 ```
 
-Nothing leaves your machine. The "live indicator" pulse you see in the header is a CSS animation — there's no server-side anything.
+Per-user (the cross-project home + registry):
+
+```
+~/.claude/cadence/
+├── home.html                   # cross-project home page
+├── _design.css
+├── _home.js
+└── registry.json               # which projects you've used the plugin in
+```
+
+Nothing leaves your machine. The "live" indicator pulse is a CSS animation — there's no server-side anything.
 
 ## Architecture
 
-- **Hooks** ([`plugins/claudecadence/hooks/`](plugins/claudecadence/hooks/)) emit timeline nodes as a side effect of Claude Code's lifecycle events. Zero LLM cost.
-- **Viewer** ([`plugins/claudecadence/viewer/`](plugins/claudecadence/viewer/)) is a self-contained HTML page rendered with the Geist + Apricot design tokens. Works from `http://localhost:4173/`.
-- **Slash commands** ([`plugins/claudecadence/commands/`](plugins/claudecadence/commands/)) for `serve` / `stop` / `status` / `open`.
-- **Data model** ([`docs/DATA-MODEL.md`](docs/DATA-MODEL.md)) — JSON schema for timeline nodes.
-
-For the hook taxonomy and how to add custom nodes, see [`docs/HOOKS.md`](docs/HOOKS.md).
+- **Hooks** ([`plugins/claudecadence/hooks/`](plugins/claudecadence/hooks/)) emit timeline nodes as a side effect of Claude Code's lifecycle events. Zero LLM cost. Filtered for signal — Bash hooks only fire on `git` / `gh` commands.
+- **Per-project viewer** ([`plugins/claudecadence/viewer/`](plugins/claudecadence/viewer/)) is a self-contained HTML page that polls its own `nodes.js` every 5 s and re-renders on change.
+- **Cross-project hub** ([`plugins/claudecadence/hub/`](plugins/claudecadence/hub/)) is the home page with the cadence list and status filters.
+- **Slash commands** ([`plugins/claudecadence/commands/`](plugins/claudecadence/commands/)) for `home` / `serve` / `stop` / `status` / `open`.
 
 ## Local development
 
@@ -115,7 +137,7 @@ Iterate, then `/reload-plugins` to pick up changes without restarting Claude Cod
 
 ## Design
 
-The visual language is Geist + Apricot — a sibling to the Anthropic/Claude design family without trying to be it. Restrained palette, generous whitespace, monospace numerics, kinetic type. Every visual decision is in [`viewer/_design.css`](plugins/claudecadence/viewer/_design.css) under named tokens — no inline magic colors.
+The visual language is Geist + Apricot — a sibling to the broader Claude design family without trying to be it. Restrained palette, generous whitespace, monospace numerics, kinetic type. Every visual decision is in [`viewer/_design.css`](plugins/claudecadence/viewer/_design.css) under named tokens — no inline magic colors anywhere.
 
 ## License
 

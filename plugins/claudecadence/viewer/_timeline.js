@@ -740,9 +740,53 @@
     }
   }
 
+  // ─────────── Auto-refresh (poll nodes.js) ───────────
+  // v1.0: re-fetch nodes.js every REFRESH_MS; rerender if it changed.
+  // No SSE — keeps the server zero-magic.
+  const REFRESH_MS = 5000;
+  let lastNodesText = '';
+
+  async function pollOnce() {
+    try {
+      const r = await fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const txt = await r.text();
+      if (txt === lastNodesText) return;
+      lastNodesText = txt;
+      const m = txt.match(/window\.TIMELINE_NODES\s*=\s*(\[[\s\S]*\])\s*;/);
+      if (!m) return;
+      try {
+        window.TIMELINE_NODES = JSON.parse(m[1]);
+      } catch (_) { return; }
+      // Preserve which cards are open across rerenders.
+      const openIds = new Set();
+      document.querySelectorAll('details.card[open]').forEach(d => {
+        const li = d.closest('li.node');
+        if (li && li.dataset.id) openIds.add(li.dataset.id);
+      });
+      render();
+      openIds.forEach(id => {
+        try {
+          const li = document.querySelector(`li.node[data-id="${CSS.escape(id)}"]`);
+          if (li) {
+            const card = li.querySelector('details.card');
+            if (card) card.open = true;
+          }
+        } catch (_) { /* CSS.escape may not exist on very old browsers */ }
+      });
+    } catch (_) { /* fail-soft */ }
+  }
+
   // ─────────── Boot ───────────
   document.addEventListener('DOMContentLoaded', () => {
     render();
+    // Seed polling baseline so we don't immediately rerender on first tick.
+    fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.ok ? r.text() : '')
+      .then(t => { lastNodesText = t; })
+      .catch(() => {});
+    setInterval(pollOnce, REFRESH_MS);
+
     document.getElementById('search').addEventListener('input', e => {
       searchQuery = e.target.value; render();
     });
