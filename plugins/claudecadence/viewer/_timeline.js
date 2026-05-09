@@ -696,6 +696,201 @@
     return true;
   }
 
+  // ─────────── Turn grouping (v1.1) ───────────
+  // Each prompt opens a turn. Subsequent tool calls + sub-agent activity
+  // belong to that turn. The Stop response closes it. Anything before any
+  // prompt becomes an orphan turn (no header), so SessionStart and the like
+  // still render visibly.
+  function isPromptNode(n) {
+    return (n.tags || []).indexOf('prompt') !== -1 || (n.agent === 'founder' && n.kind !== 'decision');
+  }
+  function isResponseNode(n) {
+    return n.kind === 'response' && n.agent === 'orchestrator' && (n.tags || []).indexOf('response') !== -1;
+  }
+  function groupIntoTurns(nodes) {
+    const turns = [];
+    let current = null;
+    nodes.forEach(n => {
+      if (isPromptNode(n)) {
+        if (current) turns.push(current);
+        current = { prompt: n, children: [], response: null, ts: n.ts };
+      } else if (current && isResponseNode(n)) {
+        current.response = n;
+        turns.push(current);
+        current = null;
+      } else if (current) {
+        current.children.push(n);
+      } else {
+        // Orphan — no prompt yet (e.g. SessionStart). Make a headerless turn.
+        turns.push({ prompt: null, children: [n], response: null, ts: n.ts });
+      }
+    });
+    if (current) turns.push(current);  // turn in progress (no response yet)
+    return turns;
+  }
+
+  function turnSummary(turn) {
+    // Build the "X reads · Y edits · Z bash · subagent: name" strip.
+    const counts = {};
+    let subagent = null;
+    (turn.children || []).forEach(c => {
+      const tags = c.tags || [];
+      if (tags.indexOf('read') !== -1) counts.reads = (counts.reads || 0) + 1;
+      else if (tags.indexOf('wrote') !== -1 || tags.indexOf('edited') !== -1) counts.edits = (counts.edits || 0) + 1;
+      else if (tags.indexOf('bash') !== -1) counts.bash = (counts.bash || 0) + 1;
+      else if (tags.indexOf('search') !== -1) counts.search = (counts.search || 0) + 1;
+      else if (tags.indexOf('web') !== -1) counts.web = (counts.web || 0) + 1;
+      else if (tags.indexOf('fork') !== -1 || tags.indexOf('merge') !== -1) {
+        counts.subagent = (counts.subagent || 0) + 1;
+        if (!subagent && c.agent && c.agent !== 'orchestrator' && c.agent !== 'founder') subagent = c.agent;
+      } else {
+        counts.other = (counts.other || 0) + 1;
+      }
+    });
+    const parts = [];
+    if (counts.reads)    parts.push(`<strong>${counts.reads}</strong> reads`);
+    if (counts.edits)    parts.push(`<strong>${counts.edits}</strong> edits`);
+    if (counts.bash)     parts.push(`<strong>${counts.bash}</strong> bash`);
+    if (counts.search)   parts.push(`<strong>${counts.search}</strong> search`);
+    if (counts.web)      parts.push(`<strong>${counts.web}</strong> web`);
+    if (counts.subagent) parts.push(`<strong>${counts.subagent}</strong> sub-agent`);
+    if (subagent) parts.push(`→ <em>${escapeHtml(subagent)}</em>`);
+    if (counts.other && !parts.length) parts.push(`<strong>${counts.other}</strong> tool calls`);
+    return parts.join(' · ');
+  }
+
+  function renderTurn(turn) {
+    const li = el('li','turn');
+    if (turn.prompt) {
+      li.dataset.id = turn.prompt.id;
+      li.id = turn.prompt.id;
+    }
+    // Rail with the trunk dot anchored on the prompt.
+    const rail = el('div','rail');
+    const marker = el('div','marker is-filled');
+    if (turn.prompt && turn.prompt.agent === 'founder') {
+      marker.style.setProperty('--lane', 'var(--apricot-600)');
+    }
+    rail.appendChild(marker);
+    li.appendChild(rail);
+
+    // Outer card representing the turn.
+    const card = document.createElement('details');
+    card.className = 'card turn-card';
+    card.dataset.status = (turn.prompt ? turn.prompt.status : (turn.children[0] && turn.children[0].status) || 'completed');
+    // Default open if it's the latest turn (no response = in progress).
+    if (!turn.response) card.open = true;
+
+    const sum = document.createElement('summary');
+    sum.appendChild(el('span','lane-mark'));
+
+    if (turn.prompt) {
+      const pillEl = el('span','agent-pill');
+      pillEl.style.setProperty('--lane', laneVar('founder'));
+      pillEl.appendChild(el('span','swatch'));
+      pillEl.appendChild(document.createTextNode(' you'));
+      sum.appendChild(pillEl);
+
+      const titleEl = el('h3','title');
+      titleEl.textContent = turn.prompt.title || '(empty prompt)';
+      sum.appendChild(titleEl);
+    } else {
+      const titleEl = el('h3','title');
+      titleEl.textContent = '(session events)';
+      titleEl.style.color = 'var(--mid)';
+      titleEl.style.fontStyle = 'italic';
+      sum.appendChild(titleEl);
+    }
+
+    const tag = el('span','status-tag');
+    tag.appendChild(el('span','dot'));
+    tag.appendChild(document.createTextNode(turn.response ? 'replied' : (turn.children.length ? 'working…' : 'open')));
+    sum.appendChild(tag);
+
+    const tm = el('span','time');
+    tm.innerHTML = `<time>${escapeHtml(shortTime(turn.ts))}</time> <span class="rel">· ${escapeHtml(rel(turn.ts))}</span>`;
+    sum.appendChild(tm);
+
+    const chev = el('span','chevron');
+    chev.innerHTML = chevronSvg();
+    sum.appendChild(chev);
+    card.appendChild(sum);
+
+    // Activity strip — shown ALWAYS so collapsed cards still tell the story.
+    if (turn.children.length || turn.response) {
+      const strip = el('div','turn-strip');
+      const activity = turnSummary(turn);
+      const respPreview = turn.response ? `<span class="resp-preview">↪ ${escapeHtml(turn.response.summary || turn.response.title || '')}</span>` : '';
+      strip.innerHTML = (activity || '') + (activity && respPreview ? ' · ' : '') + respPreview;
+      sum.parentNode.insertBefore(strip, sum.nextSibling);
+    }
+
+    // Body — only when expanded.
+    const body = el('div','body turn-body');
+
+    // 1. Full prompt body
+    if (turn.prompt && turn.prompt.blocks && turn.prompt.blocks.length) {
+      const promptSection = el('div','turn-section');
+      promptSection.appendChild(el('div','section-label','prompt'));
+      const inner = el('div','blocks');
+      turn.prompt.blocks.forEach(b => {
+        const r = renderers[b.type];
+        if (r) inner.appendChild(r(b));
+      });
+      promptSection.appendChild(inner);
+      body.appendChild(promptSection);
+    }
+
+    // 2. Each child rendered as a compact child-card
+    if (turn.children.length) {
+      const childSection = el('div','turn-section');
+      childSection.appendChild(el('div','section-label', `during this turn · ${turn.children.length}`));
+      const childList = el('ul','turn-children');
+      turn.children.forEach(c => {
+        const childLi = el('li','turn-child');
+        childLi.dataset.kind = c.kind || '';
+        childLi.dataset.agent = c.agent || '';
+        childLi.style.setProperty('--lane', laneVar(c.agent));
+        const cTime = el('span','child-time');
+        cTime.textContent = shortTime(c.ts);
+        const cAgent = el('span','child-agent');
+        cAgent.textContent = c.agent || '';
+        cAgent.style.color = laneVar(c.agent);
+        const cTitle = el('span','child-title');
+        cTitle.textContent = c.title || '';
+        childLi.appendChild(cTime);
+        childLi.appendChild(cAgent);
+        childLi.appendChild(cTitle);
+        childList.appendChild(childLi);
+      });
+      childSection.appendChild(childList);
+      body.appendChild(childSection);
+    }
+
+    // 3. Claude's response
+    if (turn.response) {
+      const respSection = el('div','turn-section turn-response');
+      respSection.appendChild(el('div','section-label','response'));
+      const inner = el('div','blocks');
+      if (turn.response.blocks && turn.response.blocks.length) {
+        turn.response.blocks.forEach(b => {
+          const r = renderers[b.type];
+          if (r) inner.appendChild(r(b));
+        });
+      } else {
+        const md = el('div','block md');
+        md.textContent = turn.response.title || '';
+        inner.appendChild(md);
+      }
+      respSection.appendChild(inner);
+      body.appendChild(respSection);
+    }
+
+    card.appendChild(body);
+    li.appendChild(card);
+    return li;
+  }
+
   // ─────────── Render ───────────
   function render() {
     const allNodes = (window.TIMELINE_NODES || []).slice().sort((a, b) => {
@@ -708,7 +903,8 @@
     if (!visible.length) {
       root.appendChild(el('div','empty','No nodes match the current filters.'));
     } else {
-      visible.forEach(n => root.appendChild(renderNode(n)));
+      const turns = groupIntoTurns(visible);
+      turns.forEach(t => root.appendChild(renderTurn(t)));
     }
 
     // header counts
