@@ -187,32 +187,56 @@ def handle_user_prompt(payload: dict) -> dict | None:
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         return None
-    title = prompt.split("\n", 1)[0][:80]
+    # Slash commands look like "/foo bar" — keep them but tag distinctively.
+    is_slash = prompt.startswith("/")
+    title_line = prompt.split("\n", 1)[0]
+    title = (title_line[:96] + "…") if len(title_line) > 96 else title_line
+    summary = prompt[:160].replace("\n", " ").strip()
+    if len(prompt) > 160:
+        summary += "…"
+    blocks = []
+    # Always include the full prompt as a body block so the timeline holds the truth, not a teaser.
+    blocks.append({"type": "markdown", "value": prompt[:8000]})
     return {
         "agent": "founder",
-        "kind": "response",
+        "kind": "decision" if is_slash else "response",
         "status": "completed",
         "title": title,
-        "summary": prompt[:120] + ("…" if len(prompt) > 120 else ""),
-        "tags": ["prompt"],
+        "summary": summary,
+        "tags": ["prompt"] + (["slash"] if is_slash else []),
         "session": payload.get("session_id", "main")[:12],
-        "blocks": [{"type": "markdown", "value": prompt[:2000]}] if len(prompt) > 80 else [],
+        "blocks": blocks,
     }
+
+
+def _short(s: str, n: int = 100) -> str:
+    s = (s or "").replace("\n", " ").strip()
+    return s[:n] + ("…" if len(s) > n else "")
 
 
 def handle_pre_tool_use(payload: dict) -> dict | None:
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {}) or {}
     if tool in ("Agent", "Task"):
-        sub = tool_input.get("subagent_type") or tool_input.get("description") or "subagent"
+        sub = (
+            tool_input.get("subagent_type")
+            or tool_input.get("agent_type")
+            or "subagent"
+        )
+        desc = tool_input.get("description") or ""
+        prompt_preview = _short(tool_input.get("prompt") or "", 200)
+        blocks = []
+        if prompt_preview:
+            blocks.append({"type": "markdown", "value": prompt_preview})
         return {
             "agent": "orchestrator",
             "kind": "fork",
             "status": "in_progress",
-            "title": f"Dispatched sub-agent: {sub}",
-            "summary": (tool_input.get("description") or tool_input.get("prompt", ""))[:120],
+            "title": f"Dispatched → {sub}" + (f": {_short(desc, 80)}" if desc else ""),
+            "summary": _short(desc or prompt_preview, 160),
             "tags": ["fork", "dispatch", str(sub)],
             "session": payload.get("session_id", "main")[:12],
+            "blocks": blocks,
         }
     return None
 
@@ -224,55 +248,129 @@ def handle_post_tool_use(payload: dict) -> dict | None:
     session_id = payload.get("session_id", "main")[:12]
 
     if tool in ("Agent", "Task"):
-        sub = tool_input.get("subagent_type") or "subagent"
+        sub = tool_input.get("subagent_type") or tool_input.get("agent_type") or "subagent"
         result_text = ""
         if isinstance(tool_response, dict):
-            result_text = (tool_response.get("result") or tool_response.get("content") or "")[:200]
+            result_text = (tool_response.get("result") or tool_response.get("content") or "")
         elif isinstance(tool_response, str):
-            result_text = tool_response[:200]
+            result_text = tool_response
+        result_text = _short(result_text, 600)
+        blocks = []
+        if result_text:
+            blocks.append({"type": "markdown", "value": result_text})
         return {
             "agent": str(sub),
             "kind": "merge",
             "status": "completed",
-            "title": f"Sub-agent returned: {sub}",
-            "summary": result_text or "completed",
+            "title": f"{sub} returned",
+            "summary": _short(result_text, 160) or "completed",
             "tags": ["merge", "subagent", str(sub)],
             "session": session_id,
+            "blocks": blocks,
         }
 
     if tool == "Bash":
         cmd = (tool_input.get("command") or "").strip()
         if not cmd:
             return None
-        # Only emit nodes for git/gh/PR-shaped commands. Skip the rest to avoid log noise.
-        if not re.search(r"\b(gh|git)\b", cmd):
+        # Skip truly noisy commands; everything else surfaces.
+        if re.match(r"^\s*(cd|ls|pwd|cat|echo|true|false|wc)(\s|$)", cmd):
             return None
-        kind = "ci" if "gh run" in cmd else ("pr" if "gh pr" in cmd else "commit")
-        first_line = cmd.split("\n", 1)[0]
-        if len(first_line) > 100:
-            first_line = first_line[:100] + "…"
+        # Classify by first token.
+        first_token = cmd.split(None, 1)[0] if cmd else ""
+        if "gh run" in cmd or "gh pr checks" in cmd:
+            kind = "ci"
+        elif "gh pr" in cmd or "gh issue" in cmd:
+            kind = "pr"
+        elif first_token == "git":
+            kind = "commit"
+        else:
+            kind = "tool_call"
+        first_line = _short(cmd.split("\n", 1)[0], 120)
         return {
             "agent": "external",
             "kind": kind,
             "status": "completed",
-            "title": first_line,
-            "summary": "(via Bash hook)",
-            "tags": ["bash", kind],
+            "title": f"$ {first_line}",
+            "summary": tool_input.get("description") or "",
+            "tags": ["bash", first_token],
             "session": session_id,
             "blocks": [{"type": "code", "lang": "bash", "value": cmd[:2000]}],
         }
+
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        path = tool_input.get("file_path") or tool_input.get("notebook_path") or "unknown"
+        verb = {"Write": "Wrote", "Edit": "Edited", "MultiEdit": "Edited (multi)", "NotebookEdit": "Edited notebook"}.get(tool, "Touched")
+        # Try to give a size hint from the response.
+        size_hint = ""
+        if isinstance(tool_response, dict):
+            content = tool_response.get("content") or ""
+            if isinstance(content, str) and "\n" in content:
+                size_hint = f" · {content.count(chr(10))+1} lines"
+        return {
+            "agent": "orchestrator",
+            "kind": "tool_call",
+            "status": "completed",
+            "title": f"{verb} {path}",
+            "summary": size_hint.lstrip(" ·") or "",
+            "tags": ["file", verb.lower().split()[0]],
+            "session": session_id,
+        }
+
+    if tool == "Read":
+        path = tool_input.get("file_path") or "unknown"
+        return {
+            "agent": "orchestrator",
+            "kind": "tool_call",
+            "status": "completed",
+            "title": f"Read {path}",
+            "summary": "",
+            "tags": ["file", "read"],
+            "session": session_id,
+        }
+
+    if tool in ("Grep", "Glob"):
+        pattern = tool_input.get("pattern") or tool_input.get("path") or ""
+        return {
+            "agent": "orchestrator",
+            "kind": "tool_call",
+            "status": "completed",
+            "title": f"{tool} {_short(pattern, 80)}",
+            "summary": "",
+            "tags": ["search", tool.lower()],
+            "session": session_id,
+        }
+
+    if tool in ("WebFetch", "WebSearch"):
+        target = tool_input.get("url") or tool_input.get("query") or ""
+        return {
+            "agent": "orchestrator",
+            "kind": "tool_call",
+            "status": "completed",
+            "title": f"{tool}: {_short(target, 80)}",
+            "summary": "",
+            "tags": ["web", tool.lower()],
+            "session": session_id,
+        }
+
     return None
 
 
 def handle_subagent_stop(payload: dict) -> dict | None:
     session_id = payload.get("session_id", "main")[:12]
+    sub = (
+        payload.get("subagent_type")
+        or payload.get("agent_type")
+        or payload.get("agent")
+        or "subagent"
+    )
     return {
-        "agent": "orchestrator",
+        "agent": str(sub),
         "kind": "merge",
         "status": "completed",
-        "title": "Sub-agent finished",
+        "title": f"{sub} done",
         "summary": "Returned to orchestrator",
-        "tags": ["subagent", "stop"],
+        "tags": ["subagent", "stop", str(sub)],
         "session": session_id,
     }
 
