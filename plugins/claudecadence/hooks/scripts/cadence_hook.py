@@ -375,15 +375,84 @@ def handle_subagent_stop(payload: dict) -> dict | None:
     }
 
 
+def _last_assistant_text(transcript_path: str | None) -> str | None:
+    """Walk the JSONL transcript backwards and return the most recent
+    assistant text. Robust to multiple known shapes:
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}
+        {"type": "assistant", "content": [{"type": "text", "text": "..."}]}
+        {"role": "assistant", "content": "..."}
+        {"type": "assistant", "text": "..."}
+    """
+    if not transcript_path:
+        return None
+    p = Path(transcript_path)
+    if not p.exists():
+        return None
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = obj.get("type") or obj.get("role")
+        if kind != "assistant":
+            continue
+        # Many possible shapes — try them in order.
+        msg = obj.get("message") or obj
+        content = msg.get("content") or obj.get("content") or msg.get("text") or obj.get("text")
+        if isinstance(content, str):
+            text = content.strip()
+            if text:
+                return text
+        elif isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text" and isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+                elif btype is None and isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+            joined = "\n".join(p for p in parts if p).strip()
+            if joined:
+                return joined
+    return None
+
+
 def handle_stop(payload: dict) -> dict | None:
     session_id = payload.get("session_id", "main")[:12]
+    text = _last_assistant_text(payload.get("transcript_path"))
+    if text:
+        first_line = text.split("\n", 1)[0].strip()
+        title = (first_line[:96] + "…") if len(first_line) > 96 else (first_line or "Claude responded")
+        summary = text[:160].replace("\n", " ").strip()
+        if len(text) > 160:
+            summary += "…"
+        return {
+            "agent": "orchestrator",
+            "kind": "response",
+            "status": "completed",
+            "title": title,
+            "summary": summary,
+            "tags": ["response"],
+            "session": session_id,
+            "blocks": [{"type": "markdown", "value": text[:8000]}],
+        }
+    # Fallback when transcript isn't readable — better than nothing.
     return {
         "agent": "orchestrator",
         "kind": "response",
         "status": "completed",
-        "title": "Turn ended",
-        "summary": "Session turn complete; awaiting next prompt.",
-        "tags": ["stop"],
+        "title": "Claude responded",
+        "summary": "(transcript not readable; install path or permission issue)",
+        "tags": ["response", "stop"],
         "session": session_id,
     }
 
