@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ClaudeCadence · timeline</title>
+<link rel="stylesheet" href="_design.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">
+<style>
+  .empty {
+    padding: 80px 20px;
+    text-align: center;
+    color: var(--mid);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--font-size-lg);
+  }
+  .empty .hint {
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--neutral-400);
+    font-style: normal;
+  }
+</style>
+</head>
+<body>
+
+<div class="app is-summary-mode-off" id="app">
+
+  <div id="failure-banner-mount"></div>
+
+  <header class="app-header" id="app-header">
+    <div class="brand">
+      <div class="glyph">CC</div>
+      <span>ClaudeCadence</span>
+      <small>live timeline</small>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="session-meta">
+      <span class="live-meter">
+        <span class="pulse"></span>
+        <span class="label">live</span>
+        <strong id="meta-elapsed">—</strong>
+        <span class="sep">·</span>
+        <strong id="meta-count">0</strong>
+        <span class="label">nodes</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="stats-ribbon" id="stats-ribbon"></div>
+
+  <div class="filter-strip">
+    <div class="group" id="filter-status"></div>
+    <span class="divider"></span>
+    <div class="group" id="filter-agent"></div>
+    <span class="divider"></span>
+    <div class="group">
+      <span class="group-label">view</span>
+      <div class="seg" role="group" aria-label="display mode" id="view-mode">
+        <button data-mode="full" class="is-active">full</button>
+        <button data-mode="summary">summary</button>
+        <button data-mode="compact">compact</button>
+      </div>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="m11 11 3 3"/></svg>
+      <input type="text" id="search" placeholder="Search titles, summaries, tags…">
+      <kbd>⌘K</kbd>
+    </div>
+  </div>
+
+  <main class="workspace">
+    <div class="session-strip">
+      <div>
+        <h1>Live session.<span class="qualifier">Hooks-driven timeline of this Claude Code session.</span></h1>
+        <div class="meta-line">
+          <span id="meta-window">window <strong>—</strong></span>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btn-collapse-all">collapse all</button>
+        <button id="btn-expand-all">expand all</button>
+      </div>
+    </div>
+
+    <ol class="timeline" id="timeline" style="--lane: var(--lane-trunk);">
+      <div class="empty">
+        Nothing yet.
+        <div class="hint">Start working in Claude Code — the timeline fills itself.</div>
+      </div>
+    </ol>
+
+    <div class="legend">
+      <div class="item"><span class="swatch" style="background: var(--lane-trunk);"></span>orchestrator</div>
+      <div class="item"><span class="swatch" style="background: var(--apricot-600);"></span>founder (you)</div>
+      <div class="item"><span class="swatch" style="background: var(--info);"></span>backend-agent</div>
+      <div class="item"><span class="swatch" style="background: var(--success);"></span>infra / ui-agent</div>
+      <div class="item"><span class="swatch" style="background: var(--warning);"></span>external (CI / system)</div>
+      <div class="item"><span class="swatch" style="background: var(--danger);"></span>failed</div>
+    </div>
+  </main>
+</div>
+
+<script src="data/nodes.js"></script>
+<script src="_timeline.js"></script>
+</body>
+</html>

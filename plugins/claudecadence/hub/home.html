@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ClaudeCadence · home</title>
+<link rel="stylesheet" href="_design.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">
+<style>
+  .hub {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 32px 28px 96px;
+  }
+  .hub-head {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--soft);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .hub-head h1 {
+    font-family: var(--font-serif);
+    font-size: var(--font-size-3xl);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .hub-head h1 .qualifier {
+    color: var(--mid);
+    font-style: italic;
+    font-weight: 400;
+  }
+  .hub-head .meta {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--mid);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .hub-head .meta strong { color: var(--ink); font-weight: 500; }
+
+  .summary-row {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .summary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--paper);
+    border: 1px solid var(--soft);
+    border-radius: var(--radius-pill);
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--mid);
+  }
+  .summary-pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--mid);
+  }
+  .summary-pill.active .dot   { background: var(--success); box-shadow: 0 0 0 4px rgba(47,122,77,0.15); }
+  .summary-pill.stale .dot    { background: var(--warning); }
+  .summary-pill.inactive .dot { background: var(--neutral-400); }
+  .summary-pill strong { color: var(--ink); font-weight: 500; font-size: var(--font-size-sm); }
+
+  .hub-filter {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .cadence-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cadence {
+    display: grid;
+    grid-template-columns: 12px 1fr auto auto auto;
+    gap: 16px;
+    align-items: center;
+    background: var(--paper);
+    border: 1px solid var(--soft);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .12s, transform .12s;
+  }
+  .cadence:hover {
+    border-color: var(--neutral-300);
+    transform: translateX(2px);
+    text-decoration: none;
+  }
+  .cadence .lane {
+    width: 4px;
+    align-self: stretch;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-300);
+  }
+  .cadence[data-status="active"] .lane   { background: var(--success); box-shadow: 0 0 0 1px rgba(47,122,77,0.15); }
+  .cadence[data-status="stale"] .lane    { background: var(--warning); }
+  .cadence[data-status="inactive"] .lane { background: var(--neutral-300); }
+
+  .cadence .info {
+    min-width: 0;
+  }
+  .cadence .name {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--ink);
+    margin: 0 0 2px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .cadence .path {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--mid);
+    margin: 0;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .cadence .stat {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--mid);
+    text-align: right;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .cadence .stat strong { color: var(--ink); font-weight: 500; }
+  .cadence .status-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--bone);
+    color: var(--mid);
+  }
+  .cadence[data-status="active"] .status-tag   { background: var(--success-bg); color: var(--success); }
+  .cadence[data-status="stale"] .status-tag    { background: var(--warning-bg); color: var(--warning); }
+  .cadence[data-status="inactive"] .status-tag { background: var(--bone); color: var(--mid); }
+  .cadence .arrow {
+    color: var(--neutral-400);
+    transition: color .12s, transform .12s;
+  }
+  .cadence:hover .arrow { color: var(--ink); transform: translateX(3px); }
+
+  .empty {
+    padding: 80px 20px;
+    text-align: center;
+    color: var(--mid);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--font-size-lg);
+  }
+  .empty .hint {
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--neutral-400);
+    font-style: normal;
+  }
+</style>
+</head>
+<body>
+
+<div class="hub">
+
+  <div class="hub-head">
+    <div>
+      <h1>Cadences.<span class="qualifier"> Every Claude Code session you've started.</span></h1>
+    </div>
+    <div class="meta">
+      <span id="updated">—</span><br>
+      <span id="hub-path">—</span>
+    </div>
+  </div>
+
+  <div class="summary-row" id="summary-row"></div>
+
+  <div class="hub-filter">
+    <div class="group" id="filter-status">
+      <span class="group-label">show</span>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="m11 11 3 3"/></svg>
+      <input type="text" id="search" placeholder="Search by name or path…">
+      <kbd>⌘K</kbd>
+    </div>
+  </div>
+
+  <div class="cadence-list" id="cadence-list">
+    <div class="empty">
+      Loading cadences…
+    </div>
+  </div>
+
+</div>
+
+<script src="_home.js"></script>
+</body>
+</html>
