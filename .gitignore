@@ -162,3 +162,7 @@ Thumbs.db
 # ClaudeCadence: per-user runtime state (project's .claude/cadence/ data)
 # is per-user and never tracked. The plugin lives in this repo;
 # user data lives in their project.
+
+# ClaudeCadence runtime — when developing the plugin in this repo, hooks
+# write to .claude/cadence/. That's per-developer state, never tracked.
+.claude/
