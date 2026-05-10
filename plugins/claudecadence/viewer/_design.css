@@ -2838,3 +2838,73 @@ mark {
 .child-group[data-tool="web"]   { --c: var(--tool-web); }
 .child-group[data-tool="think"] { --c: var(--tool-think); }
 .child-group[data-tool="fail"]  { --c: var(--tool-fail); }
+
+/* ── v1.8.1 — header home link, custom-range row, session-pane width fix ── */
+
+.app-header .home-link {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--soft);
+  margin-left: 14px;
+  transition: color .12s, border-color .12s, background .12s;
+  white-space: nowrap;
+}
+.app-header .home-link:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--bone);
+}
+
+.time-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px clamp(24px, 4vw, 56px);
+  background: var(--bone);
+  border-bottom: 1px solid var(--soft);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+}
+.time-custom-row .label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mid);
+  font-size: 10px;
+}
+.time-custom-row .sep { color: var(--neutral-400); }
+.time-custom-row input[type="datetime-local"] {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+.time-custom-row .clear-btn {
+  background: transparent;
+  border: 1px solid var(--soft);
+  color: var(--mid);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.time-custom-row .clear-btn:hover { color: var(--ink); border-color: var(--ink); }
+
+/* Defensive: ensure the session pane fills its grid cell at every breakpoint. */
+.viewer-shell.is-multi { width: 100%; }
+.viewer-shell.is-multi .session-pane {
+  width: 100%;
+  min-width: 0;
+}
+.session-pane > ol.timeline { width: 100%; max-width: none; }

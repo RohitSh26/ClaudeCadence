@@ -834,23 +834,40 @@
         });
         timeBox.appendChild(chip);
       });
+    }
+
+    // Custom date-range UI lives OUTSIDE the chip strip so it doesn't push
+    // chips onto a new line when the user picks "custom".
+    const customRow = document.getElementById('time-custom-row');
+    if (customRow) {
       if (activeTimeRange === 'custom') {
-        const wrap = el('span', 'chip custom-range');
-        wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center;padding:2px 8px;';
+        customRow.innerHTML = '';
+        customRow.hidden = false;
+        const lab = el('span','label','custom range');
         const fromI = document.createElement('input');
-        fromI.type = 'datetime-local';
-        fromI.value = customFrom || '';
-        fromI.style.cssText = 'border:none;background:transparent;font:inherit;color:inherit;width:170px;';
+        fromI.type = 'datetime-local'; fromI.value = customFrom || '';
         fromI.addEventListener('change', () => { customFrom = fromI.value; writeHash(); render(); });
-        const sep = el('span', null, '→');
-        sep.style.opacity = '0.5';
+        const sep = el('span','sep','→');
         const toI = document.createElement('input');
-        toI.type = 'datetime-local';
-        toI.value = customTo || '';
-        toI.style.cssText = fromI.style.cssText;
+        toI.type = 'datetime-local'; toI.value = customTo || '';
         toI.addEventListener('change', () => { customTo = toI.value; writeHash(); render(); });
-        wrap.appendChild(fromI); wrap.appendChild(sep); wrap.appendChild(toI);
-        timeBox.appendChild(wrap);
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'clear-btn';
+        clear.textContent = 'clear';
+        clear.addEventListener('click', () => {
+          customFrom = ''; customTo = '';
+          activeTimeRange = 'all';
+          writeHash(); render();
+        });
+        customRow.appendChild(lab);
+        customRow.appendChild(fromI);
+        customRow.appendChild(sep);
+        customRow.appendChild(toI);
+        customRow.appendChild(clear);
+      } else {
+        customRow.hidden = true;
+        customRow.innerHTML = '';
       }
     }
   }
@@ -1446,9 +1463,33 @@
   }
 
   // ─────────── Boot ───────────
+  // Resolve the hub URL — three cases:
+  //   1. We're served under /c/<slug>/ (via hub) → link to "/"
+  //   2. We're served per-project, hub is running → fetch /api/hub-url, link to it
+  //   3. Hub not running → keep the link hidden
+  function wireHomeLink() {
+    const link = document.getElementById('home-link');
+    if (!link) return;
+    if (location.pathname.startsWith('/c/')) {
+      link.href = '/';
+      link.hidden = false;
+      return;
+    }
+    fetch('api/hub-url', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.url) {
+          link.href = j.url;
+          link.hidden = false;
+        }
+      })
+      .catch(() => {});
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     readHash();
     window.addEventListener('hashchange', () => { readHash(); render(); });
+    wireHomeLink();
     render();
     // Seed polling baseline so we don't immediately rerender on first tick.
     fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })

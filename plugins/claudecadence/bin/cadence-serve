@@ -261,9 +261,38 @@ function makeProjectHandler(cadenceDir) {
   return function (req, res) {
     if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
     const u = url.parse(req.url);
-    let clean = decodeURIComponent(u.pathname || '/');
-    if (clean === '/' || clean.endsWith('/')) clean = (clean || '/') + 'index.html';
-    const target = safeJoin(cadenceDir, clean);
+    const clean = decodeURIComponent(u.pathname || '/');
+
+    // /api/hub-url — returns the running hub URL (or null) so the per-project
+    // viewer can show a "all cadences" link when the user has the hub up.
+    if (clean === '/api/hub-url') {
+      const hub = process.env.CLAUDECADENCE_HUB_DIR
+        ? path.resolve(process.env.CLAUDECADENCE_HUB_DIR)
+        : path.join(os.homedir(), '.claude', 'cadence');
+      const pidFile  = path.join(hub, '.server.pid');
+      const portFile = path.join(hub, '.server.port');
+      let hubUrl = null;
+      try {
+        if (fs.existsSync(pidFile) && fs.existsSync(portFile)) {
+          const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+          if (isPidAlive(pid)) {
+            const port = parseInt(fs.readFileSync(portFile, 'utf8').trim(), 10);
+            if (Number.isFinite(port)) hubUrl = `http://localhost:${port}/`;
+          }
+        }
+      } catch (_) {}
+      const body = Buffer.from(JSON.stringify({ url: hubUrl }), 'utf8');
+      res.writeHead(200, Object.assign({
+        'Content-Type': 'application/json',
+        'Content-Length': body.length,
+      }, noCacheHeaders()));
+      res.end(body);
+      return;
+    }
+
+    let serveAt = clean;
+    if (serveAt === '/' || serveAt.endsWith('/')) serveAt = (serveAt || '/') + 'index.html';
+    const target = safeJoin(cadenceDir, serveAt);
     if (!target) { res.writeHead(404); res.end(); return; }
     serveFile(res, target);
   };

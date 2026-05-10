@@ -62,17 +62,37 @@
       const m = txt.match(/window\.TIMELINE_NODES\s*=\s*(\[[\s\S]*\])\s*;/);
       const nodes = m ? JSON.parse(m[1]) : [];
       const lastTs = nodes.length ? nodes[nodes.length - 1].ts : null;
-      // Also check Last-Modified header from server as a fallback signal of activity.
       const lm = r.headers.get('last-modified');
       const mtimeIso = lm ? new Date(lm).toISOString() : null;
       const effectiveTs = lastTs || mtimeIso;
+
+      // Group nodes by session id to surface every Claude Code session that
+      // ran inside this cadence — the "home page" should drill down to
+      // sessions, not just projects.
+      const sessionMap = new Map();
+      for (const n of nodes) {
+        const sid = n.session || 'main';
+        let s = sessionMap.get(sid);
+        if (!s) {
+          s = { id: sid, count: 0, firstTs: n.ts, lastTs: n.ts };
+          sessionMap.set(sid, s);
+        }
+        s.count += 1;
+        if (n.ts && (!s.lastTs || n.ts > s.lastTs)) s.lastTs = n.ts;
+        if (n.ts && (!s.firstTs || n.ts < s.firstTs)) s.firstTs = n.ts;
+      }
+      const sessions = Array.from(sessionMap.values())
+        .map(s => ({ ...s, status: statusFor(s.lastTs) }))
+        .sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || ''));
+
       stats[c.slug] = {
         count: nodes.length,
         lastTs: effectiveTs,
         status: statusFor(effectiveTs),
+        sessions,
       };
     } catch (err) {
-      stats[c.slug] = { count: 0, lastTs: null, status: 'inactive', error: String(err) };
+      stats[c.slug] = { count: 0, lastTs: null, status: 'inactive', sessions: [], error: String(err) };
     }
   }
 
@@ -190,6 +210,34 @@
       a.appendChild(arrow);
 
       card.appendChild(a);
+
+      // Sessions list — drill-down into each Claude Code session that ran
+      // inside this cadence. Linked URLs jump straight to the per-project
+      // viewer pre-filtered to that session.
+      const sess = (c.sessions || []);
+      if (sess.length) {
+        const slist = el('div', 'session-list');
+        const top = sess.slice(0, 6);
+        const more = sess.length - top.length;
+        top.forEach(s => {
+          const row = document.createElement('a');
+          row.className = 'session-line';
+          row.dataset.status = s.status;
+          row.href = `c/${encodeURIComponent(c.slug)}/#session=${encodeURIComponent(s.id)}`;
+          row.innerHTML =
+            `<span class="lane"></span>` +
+            `<span class="id">${(s.id || '').replace(/[<>&"]/g, '')}</span>` +
+            `<span class="status-pill">${s.status}</span>` +
+            `<span class="meta"><strong>${s.count}</strong> events · ${fmtRel(s.lastTs)}</span>`;
+          slist.appendChild(row);
+        });
+        if (more > 0) {
+          const moreRow = el('div', 'session-line is-more');
+          moreRow.textContent = `+${more} more session${more === 1 ? '' : 's'}`;
+          slist.appendChild(moreRow);
+        }
+        card.appendChild(slist);
+      }
 
       const forget = el('button', 'forget-btn');
       forget.type = 'button';

@@ -224,6 +224,74 @@
     background: var(--danger-bg, var(--bone));
   }
 
+  /* Sessions inside a cadence — listed under the cadence row */
+  .session-list {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    padding: 8px 10px 6px 22px;
+    border-top: 1px dashed var(--soft);
+  }
+  .session-line {
+    display: grid;
+    grid-template-columns: 4px 220px 80px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: inherit;
+    transition: background .1s;
+  }
+  .session-line:hover { background: var(--bone); text-decoration: none; }
+  .session-line .lane {
+    width: 4px;
+    align-self: stretch;
+    border-radius: 2px;
+    background: var(--neutral-300);
+    min-height: 14px;
+  }
+  .session-line[data-status="active"] .lane {
+    background: var(--success);
+    box-shadow: 0 0 0 1px rgba(47,122,77,0.15);
+  }
+  .session-line[data-status="stale"] .lane    { background: var(--warning); }
+  .session-line[data-status="inactive"] .lane { background: var(--neutral-300); }
+  .session-line .id {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .session-line[data-status="inactive"] .id { color: var(--mid); }
+  .session-line .status-pill {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--mid);
+  }
+  .session-line[data-status="active"] .status-pill { color: var(--success); }
+  .session-line[data-status="stale"]  .status-pill { color: var(--warning); }
+  .session-line .meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--mid);
+    text-align: right;
+  }
+  .session-line .meta strong { color: var(--ink); font-weight: 500; }
+  .session-line.is-more {
+    color: var(--mid);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-style: italic;
+    padding-left: 22px;
+  }
+
   .empty {
     padding: 80px 20px;
     text-align: center;
