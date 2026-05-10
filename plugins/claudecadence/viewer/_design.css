@@ -504,12 +504,20 @@ mark {
    ────────────────────────────────────────────────────────────────── */
 
 .workspace {
-  padding: 40px 28px 96px;
-  max-width: 1040px;
+  padding: 40px clamp(24px, 4vw, 56px) 96px;
+  max-width: none;
   margin: 0 auto;
   position: relative;
 }
-.workspace.wide { max-width: 1480px; }
+.workspace.wide { max-width: none; }
+/* Cap the prose-card column on ultra-wide screens so single-session timelines
+   stay readable even when the workspace itself is full-width. */
+.workspace > ol.timeline,
+.workspace > .viewer-shell:not(.is-multi) {
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .workspace .session-strip {
   display: flex;
