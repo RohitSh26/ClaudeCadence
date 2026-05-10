@@ -43,6 +43,9 @@
   let activeTimeRange = 'all';     // v1.7: 'all' | '1h' | '24h' | '7d' | 'custom'
   let customFrom = '';             // ISO local string, used when range = custom
   let customTo   = '';
+  const collapsedGroups = new Set();          // v1.8: which sidebar status groups are collapsed
+  const expandedChildGroups = new Set();      // v1.8: which (turn:tool) child groups are expanded
+  const expandedShowAll     = new Set();      // v1.8: which (turn:tool) child groups have "show all"
 
   const TIME_PRESETS_MS = {
     '1h':  60 * 60 * 1000,
@@ -922,56 +925,65 @@
 
     const shell = el('div','viewer-shell is-multi');
 
-    const sidebar = el('aside','session-sidebar');
+    // v1.8: status-grouped sidebar with compact one-line rows.
+    const sidebar = el('aside','session-sidebar v3-grouped');
     const head = el('div','head');
     const lab = el('span','label'); lab.textContent = 'sessions';
     const cnt = el('span','count'); cnt.textContent = sessions.length;
     head.appendChild(lab); head.appendChild(cnt);
     sidebar.appendChild(head);
 
-    const list = el('ul');
-    sessions.forEach(s => {
-      const row = el('li','session-row');
-      row.dataset.session = s.id;
-      row.dataset.status  = s.status;
-      if (s.id === activeSessionForView) row.classList.add('is-selected');
-
-      row.appendChild(el('div','lane-stripe'));
-
-      const body = el('div','body');
-      const titleLine = el('div','title-line');
-      const idEl = el('span','id'); idEl.textContent = s.id;
-      titleLine.appendChild(idEl);
-      const pill = el('span','status-pill'); pill.textContent = s.status;
-      titleLine.appendChild(pill);
-      body.appendChild(titleLine);
-
-      const meta = el('div','meta');
-      const failsHtml = s.failures
-        ? `<span style="color:var(--danger)"><strong>${s.failures}</strong> fails</span>`
-        : '';
-      meta.innerHTML =
-        `<span><strong>${s.turns || '—'}</strong> turns</span>` +
-        `<span><strong>${s.events}</strong> events</span>` +
-        `<span>${escapeHtml(rel(s.lastTs))} ago</span>` +
-        failsHtml;
-      body.appendChild(meta);
-
-      if (s.firstPromptText) {
-        const fp = el('div','first-prompt');
-        fp.textContent = s.firstPromptText;
-        body.appendChild(fp);
-      }
-      row.appendChild(body);
-
-      row.addEventListener('click', () => {
-        activeSessionForView = s.id;
-        writeHash();
+    const groups = [
+      { key: 'active',   label: 'active'   },
+      { key: 'stale',    label: 'stale'    },
+      { key: 'inactive', label: 'inactive' },
+    ];
+    groups.forEach(g => {
+      const inGroup = sessions.filter(s => s.status === g.key);
+      if (!inGroup.length) return;
+      const block = el('div','group-block');
+      const headBtn = document.createElement('button');
+      headBtn.type = 'button';
+      headBtn.className = 'group-head';
+      headBtn.dataset.status = g.key;
+      const isCollapsed = collapsedGroups.has(g.key);
+      headBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+      headBtn.innerHTML =
+        '<span class="swatch"></span>' +
+        '<span class="label">' + escapeHtml(g.label) + '</span>' +
+        '<span class="count">' + inGroup.length + '</span>' +
+        '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6">' +
+        '<path d="M3 4l3 3 3-3"/></svg>';
+      const body = el('div','group-body');
+      body.setAttribute('aria-hidden', isCollapsed ? 'true' : 'false');
+      headBtn.addEventListener('click', () => {
+        if (collapsedGroups.has(g.key)) collapsedGroups.delete(g.key);
+        else collapsedGroups.add(g.key);
         render();
       });
-      list.appendChild(row);
+      inGroup.forEach(s => {
+        const row = el('div','session-row compact');
+        row.dataset.session = s.id;
+        row.dataset.status  = s.status;
+        if (s.id === activeSessionForView) row.classList.add('is-selected');
+        row.appendChild(el('span','lane-stripe'));
+        const idEl = el('span','id'); idEl.textContent = s.id;
+        row.appendChild(idEl);
+        const ageEl = el('span','age'); ageEl.textContent = rel(s.lastTs);
+        row.appendChild(ageEl);
+        row.title = `${s.turns || 0} turns · ${s.events} events` + (s.failures ? ` · ${s.failures} failed` : '');
+        row.addEventListener('click', () => {
+          activeSessionForView = s.id;
+          writeHash();
+          render();
+        });
+        body.appendChild(row);
+      });
+      block.appendChild(headBtn);
+      block.appendChild(body);
+      sidebar.appendChild(block);
     });
-    sidebar.appendChild(list);
+
     shell.appendChild(sidebar);
 
     const pane = el('div','session-pane');
@@ -1059,6 +1071,33 @@
     });
     if (current) turns.push(current);
     return turns;
+  }
+
+  // v1.8: classify a child node by tool family (read/edit/bash/web/think/fail/other)
+  function classifyChild(c) {
+    if (c.status === 'failed') return 'fail';
+    const tags = c.tags || [];
+    if (tags.indexOf('read') !== -1)                                return 'read';
+    if (tags.indexOf('wrote') !== -1 || tags.indexOf('edited') !== -1) return 'edit';
+    if (tags.indexOf('bash') !== -1)                                return 'bash';
+    if (tags.indexOf('search') !== -1 || tags.indexOf('web') !== -1) return 'web';
+    if (tags.indexOf('fork') !== -1 || tags.indexOf('merge') !== -1) return 'think';
+    return 'other';
+  }
+  const TOOL_LABELS = {
+    read:  'read',
+    edit:  'edit',
+    bash:  'bash',
+    web:   'web',
+    think: 'subagent',
+    fail:  'failed',
+    other: 'other',
+  };
+  const TOOL_ORDER = ['read', 'edit', 'bash', 'web', 'think', 'fail', 'other'];
+
+  function childTargetText(c) {
+    // Pick the most useful one-line target string for the row.
+    return (c.title || c.summary || '').trim();
   }
 
   function turnSummary(turn) {
@@ -1158,7 +1197,9 @@
     }
 
     // Body — only when expanded.
-    const body = el('div','body turn-body');
+    // v1.8: `constrained` caps prose blocks at --prose-width (72ch) for
+    // readability; tables / code / charts still go full-bleed.
+    const body = el('div','body turn-body constrained');
 
     // 1. Full prompt body
     if (turn.prompt && turn.prompt.blocks && turn.prompt.blocks.length) {
@@ -1173,29 +1214,78 @@
       body.appendChild(promptSection);
     }
 
-    // 2. Each child rendered as a compact child-card
+    // 2. v1.8 — children grouped by tool family (read/edit/bash/web/think/fail).
+    //    Each group is collapsed by default; click expands. First 5 rows visible,
+    //    "show all N" reveals the rest.
     if (turn.children.length) {
+      const turnKey = (turn.id || turn.prompt?.id || (turn.children[0] && turn.children[0].id) || 'orphan');
       const childSection = el('div','turn-section');
       childSection.appendChild(el('div','section-label', `during this turn · ${turn.children.length}`));
-      const childList = el('ul','turn-children');
+
+      // Bucket children by tool family.
+      const buckets = new Map();
       turn.children.forEach(c => {
-        const childLi = el('li','turn-child');
-        childLi.dataset.kind = c.kind || '';
-        childLi.dataset.agent = c.agent || '';
-        childLi.style.setProperty('--lane', laneVar(c.agent));
-        const cTime = el('span','child-time');
-        cTime.textContent = shortTime(c.ts);
-        const cAgent = el('span','child-agent');
-        cAgent.textContent = c.agent || '';
-        cAgent.style.color = laneVar(c.agent);
-        const cTitle = el('span','child-title');
-        cTitle.textContent = c.title || '';
-        childLi.appendChild(cTime);
-        childLi.appendChild(cAgent);
-        childLi.appendChild(cTitle);
-        childList.appendChild(childLi);
+        const tool = classifyChild(c);
+        if (!buckets.has(tool)) buckets.set(tool, []);
+        buckets.get(tool).push(c);
       });
-      childSection.appendChild(childList);
+
+      const groupsWrap = el('div','child-groups');
+      TOOL_ORDER.forEach(tool => {
+        const items = buckets.get(tool);
+        if (!items || !items.length) return;
+        const groupKey = `${turnKey}:${tool}`;
+        const isExpanded = expandedChildGroups.has(groupKey);
+        const showAll    = expandedShowAll.has(groupKey);
+        const visible = showAll ? items : items.slice(0, 5);
+        const lastTs = items[items.length - 1]?.ts;
+
+        const group = el('div','child-group');
+        group.dataset.tool = tool;
+        group.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'child-group-head';
+        head.innerHTML =
+          '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4l3 3 3-3"/></svg>' +
+          `<span class="tool-tag"><span class="swatch"></span>${escapeHtml(TOOL_LABELS[tool] || tool)}</span>` +
+          `<span class="count">${items.length}</span>` +
+          `<span class="summary">last <strong>${escapeHtml(shortTime(lastTs))}</strong></span>`;
+        head.addEventListener('click', () => {
+          if (expandedChildGroups.has(groupKey)) expandedChildGroups.delete(groupKey);
+          else expandedChildGroups.add(groupKey);
+          render();
+        });
+        group.appendChild(head);
+
+        const groupBody = el('div','child-group-body');
+        visible.forEach(c => {
+          const row = el('div','child-row');
+          const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
+          const tg  = el('span','target'); tg.textContent  = childTargetText(c);
+          const me  = el('span','meta');   me.textContent  = c.agent || '';
+          if (c.status === 'failed') me.classList.add('fail');
+          row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
+          groupBody.appendChild(row);
+        });
+        if (items.length > 5 && !showAll) {
+          const more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'more-link';
+          more.textContent = `show all ${items.length} ${TOOL_LABELS[tool] || tool} →`;
+          more.addEventListener('click', (e) => {
+            e.stopPropagation();
+            expandedShowAll.add(groupKey);
+            expandedChildGroups.add(groupKey);
+            render();
+          });
+          groupBody.appendChild(more);
+        }
+        group.appendChild(groupBody);
+        groupsWrap.appendChild(group);
+      });
+      childSection.appendChild(groupsWrap);
       body.appendChild(childSection);
     }
 

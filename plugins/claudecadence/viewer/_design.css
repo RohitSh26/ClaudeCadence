@@ -2584,3 +2584,257 @@ mark {
   font-family: var(--font-serif);
   font-style: italic;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   v3 — additive tokens + components from Claude Design iter3 proposal.
+   Additive only; no production rule overridden silently.
+   ────────────────────────────────────────────────────────────────── */
+
+:root {
+  --prose-width:        72ch;
+  --sidebar-w:          260px;
+  --sidebar-w-compact:  220px;
+
+  --status-active:   var(--success);
+  --status-stale:    var(--warning);
+  --status-inactive: var(--neutral-400);
+
+  /* tool-type lanes for activity glyphs / child grouping */
+  --tool-read:  var(--info);
+  --tool-edit:  var(--apricot-600);
+  --tool-bash:  var(--neutral-700);
+  --tool-web:   var(--success);
+  --tool-think: var(--neutral-400);
+  --tool-fail:  var(--danger);
+}
+
+/* ── §5 prose-width cap inside cards ─────────────────────────────────── */
+.card .body.constrained .block.md { max-width: var(--prose-width); }
+.card .body.constrained .block.md .full-bleed { max-width: none; }
+.card .body.constrained > .blocks > .block:not(.md) { max-width: none; }
+.turn-section .blocks .block.md { max-width: var(--prose-width); }
+
+/* ── §2 Multi-session sidebar — status-grouped, compact rows ─────────── */
+
+.session-sidebar.v3-grouped .head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.session-sidebar.v3-grouped ul { padding: 0; }
+.session-sidebar.v3-grouped .group-block { border-bottom: 1px solid var(--soft); }
+.session-sidebar.v3-grouped .group-block:last-child { border-bottom: none; }
+.session-sidebar.v3-grouped .group-head {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 14px;
+  cursor: pointer;
+  background: var(--paper);
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mid);
+  font-weight: 500;
+}
+.session-sidebar.v3-grouped .group-head:hover { background: var(--bone); }
+.session-sidebar.v3-grouped .group-head .chev {
+  width: 10px; height: 10px;
+  color: var(--neutral-400);
+  transition: transform .18s var(--ease-out, ease-out);
+}
+.session-sidebar.v3-grouped .group-head[aria-expanded="false"] .chev {
+  transform: rotate(-90deg);
+}
+.session-sidebar.v3-grouped .group-head .swatch {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--c, var(--mid));
+  justify-self: center;
+}
+.session-sidebar.v3-grouped .group-head[data-status="active"] .swatch {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(47,122,77,0.18);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+.session-sidebar.v3-grouped .group-head[data-status="stale"]    .swatch { background: var(--warning); }
+.session-sidebar.v3-grouped .group-head[data-status="inactive"] .swatch { background: var(--neutral-400); }
+.session-sidebar.v3-grouped .group-head .count {
+  font-feature-settings: 'tnum';
+  color: var(--neutral-400);
+  font-weight: 400;
+}
+.session-sidebar.v3-grouped .group-head[data-status="active"] .count {
+  color: var(--success);
+  font-weight: 500;
+}
+.session-sidebar.v3-grouped .group-body[aria-hidden="true"] { display: none; }
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(47,122,77,0.18); }
+  50%      { box-shadow: 0 0 0 5px rgba(47,122,77,0.06); }
+}
+
+/* compact (single-line) rows for both grouped and rail variants */
+.session-row.compact {
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 14px 7px 11px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+}
+.session-row.compact:hover { background: var(--bone); }
+.session-row.compact.is-selected {
+  background: var(--apricot-100);
+  border-left: 3px solid var(--apricot-600);
+  padding-left: 8px;
+}
+.session-row.compact .lane-stripe {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--neutral-300);
+  min-height: 16px;
+}
+.session-row.compact[data-status="active"] .lane-stripe {
+  background: var(--success);
+  box-shadow: 0 0 0 1px rgba(47,122,77,0.15);
+}
+.session-row.compact[data-status="stale"] .lane-stripe { background: var(--warning); }
+.session-row.compact .id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-row.compact[data-status="inactive"] .id { color: var(--mid); font-weight: 400; }
+.session-row.compact .age {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum';
+  font-size: 10px;
+  color: var(--neutral-400);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.session-row.compact[data-status="active"] .age { color: var(--success); }
+
+/* ── §3 Turn card with grouped children ──────────────────────────────── */
+
+.child-group {
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.child-group:last-child { margin-bottom: 0; }
+.child-group-head {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+.child-group-head:hover { background: var(--bone); }
+.child-group-head .chev {
+  width: 9px; height: 9px;
+  color: var(--neutral-400);
+  transition: transform .18s ease-out;
+}
+.child-group[aria-expanded="false"] .chev,
+.child-group:not([aria-expanded]) .chev { transform: rotate(-90deg); }
+.child-group[aria-expanded="false"] .child-group-body,
+.child-group:not([aria-expanded]) .child-group-body { display: none; }
+.child-group-head .tool-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--c, var(--mid));
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.child-group-head .tool-tag .swatch {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.child-group-head .count {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum';
+  font-size: 11px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.child-group-head .summary {
+  color: var(--neutral-400);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-align: right;
+  font-feature-settings: 'tnum';
+}
+.child-group-body {
+  padding: 4px 0 6px;
+  border-top: 1px dashed var(--soft);
+  background: rgba(232, 230, 224, 0.3);
+}
+.child-group-body .child-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-feature-settings: 'tnum';
+  color: var(--neutral-700);
+}
+.child-group-body .child-row:hover { background: var(--bone); }
+.child-group-body .child-row .ts { color: var(--neutral-400); font-size: 10px; }
+.child-group-body .child-row .target {
+  color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.child-group-body .child-row .meta {
+  color: var(--neutral-400);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.child-group-body .more-link {
+  display: block;
+  padding: 6px 14px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--apricot-600);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  letter-spacing: 0.02em;
+}
+.child-group-body .more-link:hover { text-decoration: underline; }
+.child-group[data-tool="read"]  { --c: var(--tool-read); }
+.child-group[data-tool="edit"]  { --c: var(--tool-edit); }
+.child-group[data-tool="bash"]  { --c: var(--tool-bash); }
+.child-group[data-tool="web"]   { --c: var(--tool-web); }
+.child-group[data-tool="think"] { --c: var(--tool-think); }
+.child-group[data-tool="fail"]  { --c: var(--tool-fail); }
