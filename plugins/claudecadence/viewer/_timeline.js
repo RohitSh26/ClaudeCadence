@@ -40,6 +40,28 @@
   let activeMode    = 'full';      // full · summary · compact · events
   let searchQuery   = '';
   let activeSessionForView = null; // v1.5: which session is in the detail pane
+  let activeTimeRange = 'all';     // v1.7: 'all' | '1h' | '24h' | '7d' | 'custom'
+  let customFrom = '';             // ISO local string, used when range = custom
+  let customTo   = '';
+
+  const TIME_PRESETS_MS = {
+    '1h':  60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d':  7 * 24 * 60 * 60 * 1000,
+  };
+
+  function timeBoundsForFilter() {
+    if (activeTimeRange === 'all') return null;
+    if (activeTimeRange === 'custom') {
+      return {
+        from: customFrom ? new Date(customFrom).getTime() : null,
+        to:   customTo   ? new Date(customTo).getTime()   : null,
+      };
+    }
+    const ms = TIME_PRESETS_MS[activeTimeRange];
+    if (!ms) return null;
+    return { from: Date.now() - ms, to: null };
+  }
 
   // ─────────── DOM helpers ───────────
   function el(tag, cls, text) {
@@ -786,12 +808,62 @@
         sessionBox.innerHTML = '';
       }
     }
+
+    // Time filter chips
+    const timeBox = document.getElementById('filter-time');
+    if (timeBox) {
+      timeBox.innerHTML = '<span class="group-label">time</span>';
+      const timeRanges = [
+        ['all',    'all'],
+        ['1h',     'last 1h'],
+        ['24h',    'last 24h'],
+        ['7d',     'last 7d'],
+        ['custom', 'custom'],
+      ];
+      timeRanges.forEach(([key, label]) => {
+        const chip = el('span', 'chip' + (key === activeTimeRange ? ' is-active' : ''));
+        chip.appendChild(document.createTextNode(label));
+        chip.addEventListener('click', () => {
+          activeTimeRange = key;
+          if (key !== 'custom') { customFrom = ''; customTo = ''; }
+          writeHash();
+          render();
+        });
+        timeBox.appendChild(chip);
+      });
+      if (activeTimeRange === 'custom') {
+        const wrap = el('span', 'chip custom-range');
+        wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center;padding:2px 8px;';
+        const fromI = document.createElement('input');
+        fromI.type = 'datetime-local';
+        fromI.value = customFrom || '';
+        fromI.style.cssText = 'border:none;background:transparent;font:inherit;color:inherit;width:170px;';
+        fromI.addEventListener('change', () => { customFrom = fromI.value; writeHash(); render(); });
+        const sep = el('span', null, '→');
+        sep.style.opacity = '0.5';
+        const toI = document.createElement('input');
+        toI.type = 'datetime-local';
+        toI.value = customTo || '';
+        toI.style.cssText = fromI.style.cssText;
+        toI.addEventListener('change', () => { customTo = toI.value; writeHash(); render(); });
+        wrap.appendChild(fromI); wrap.appendChild(sep); wrap.appendChild(toI);
+        timeBox.appendChild(wrap);
+      }
+    }
   }
 
   function matches(n) {
     if (activeStatus !== 'all' && n.status !== activeStatus) return false;
     if (activeAgent  !== 'all' && n.agent  !== activeAgent)  return false;
     if (activeSession !== 'all' && (n.session || 'main') !== activeSession) return false;
+    const bounds = timeBoundsForFilter();
+    if (bounds && n.ts) {
+      const t = new Date(n.ts).getTime();
+      if (Number.isFinite(t)) {
+        if (bounds.from != null && t < bounds.from) return false;
+        if (bounds.to   != null && t > bounds.to)   return false;
+      }
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const hay = ((n.title||'') + ' ' + (n.summary||'') + ' ' + (n.tags||[]).join(' ')).toLowerCase();
@@ -894,7 +966,7 @@
 
       row.addEventListener('click', () => {
         activeSessionForView = s.id;
-        try { history.replaceState(null, '', '#session/' + encodeURIComponent(s.id)); } catch (_) {}
+        writeHash();
         render();
       });
       list.appendChild(row);
@@ -1245,18 +1317,48 @@
     } catch (_) { /* fail-soft */ }
   }
 
-  // ─────────── Boot ───────────
-  function readSessionFromHash() {
-    const m = (location.hash || '').match(/^#session\/(.+)$/);
-    if (m) {
-      try { activeSessionForView = decodeURIComponent(m[1]); }
-      catch (_) { activeSessionForView = m[1]; }
+  // ─────────── URL hash routing ───────────
+  // Format: #key=val&key=val (URL-encoded). Backward-compat: also accept the
+  // older #session/<id> path form.
+  function readHash() {
+    const raw = (location.hash || '').replace(/^#/, '');
+    if (!raw) return;
+    const legacy = raw.match(/^session\/(.+)$/);
+    if (legacy) {
+      try { activeSessionForView = decodeURIComponent(legacy[1]); }
+      catch (_) { activeSessionForView = legacy[1]; }
+      return;
     }
+    let params;
+    try { params = new URLSearchParams(raw); }
+    catch (_) { return; }
+    if (params.has('session')) activeSessionForView = params.get('session') || null;
+    if (params.has('since')) {
+      const v = params.get('since');
+      if (['all', '1h', '24h', '7d', 'custom'].indexOf(v) !== -1) activeTimeRange = v;
+    }
+    if (params.has('from')) customFrom = params.get('from') || '';
+    if (params.has('to'))   customTo   = params.get('to')   || '';
+  }
+  function writeHash() {
+    const params = new URLSearchParams();
+    if (activeSessionForView)        params.set('session', activeSessionForView);
+    if (activeTimeRange !== 'all')   params.set('since', activeTimeRange);
+    if (activeTimeRange === 'custom') {
+      if (customFrom) params.set('from', customFrom);
+      if (customTo)   params.set('to',   customTo);
+    }
+    const s = params.toString();
+    try {
+      const target = s ? '#' + s : location.pathname + location.search;
+      history.replaceState(null, '', target);
+    } catch (_) {}
   }
 
+  // ─────────── Boot ───────────
   document.addEventListener('DOMContentLoaded', () => {
-    readSessionFromHash();
-    window.addEventListener('hashchange', () => { readSessionFromHash(); render(); });
+    readHash();
+    window.addEventListener('hashchange', () => { readHash(); render(); });
     render();
     // Seed polling baseline so we don't immediately rerender on first tick.
     fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })
