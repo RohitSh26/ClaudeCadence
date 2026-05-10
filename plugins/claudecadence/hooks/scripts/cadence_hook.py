@@ -20,6 +20,8 @@ your Claude Code session.
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
 import os
 import re
@@ -29,6 +31,12 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+# fcntl is unix-only — Windows users can still run the plugin, locking is best-effort
+try:
+    import fcntl  # type: ignore
+except ImportError:  # pragma: no cover — Windows
+    fcntl = None  # type: ignore
 
 # ─────────────────────────── Filesystem layout ────────────────────────────
 
@@ -59,20 +67,40 @@ NODES_FOOTER = ";\n"
 # ─────────────────────────── Bootstrap ────────────────────────────────────
 
 
+def _file_sha(p: Path) -> str:
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
 def bootstrap_project() -> None:
-    """Copy viewer files into the project on first run; create empty nodes.js."""
+    """Copy viewer files into the project + create empty nodes.js.
+
+    v1.4: bootstrap is version-aware. Each viewer file (index.html,
+    _design.css, _timeline.js) is overwritten when the plugin source
+    differs from the project copy, so plugin updates actually surface
+    in the browser. The user's data file (nodes.js) is never touched
+    once it exists.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not NODES_JS.exists():
         NODES_JS.write_text(NODES_HEADER + "[]" + NODES_FOOTER)
-    if VIEWER_SOURCE.exists():
-        for item in VIEWER_SOURCE.iterdir():
-            target = CADENCE_DIR / item.name
-            if item.is_dir():
-                if not target.exists():
-                    shutil.copytree(item, target)
-            else:
-                if not target.exists():
-                    shutil.copy2(item, target)
+    if not VIEWER_SOURCE.exists():
+        return
+    for item in VIEWER_SOURCE.iterdir():
+        target = CADENCE_DIR / item.name
+        if item.is_dir():
+            # Only `data/` could be in here; we never overwrite the user's data dir.
+            if not target.exists():
+                shutil.copytree(item, target)
+            continue
+        # File in the viewer source — refresh if hash differs.
+        if not target.exists() or _file_sha(target) != _file_sha(item):
+            try:
+                shutil.copy2(item, target)
+            except OSError:
+                pass
 
 
 def register_in_hub(session_id: str | None = None) -> None:
@@ -185,26 +213,54 @@ def end_turn() -> None:
         pass
 
 
+@contextlib.contextmanager
+def nodes_lock():
+    """Cross-hook flock around nodes.js to keep concurrent writes safe.
+
+    Best-effort: on systems without fcntl (Windows) we just no-op and
+    accept the small chance of an interleaved write. Lockfile lives
+    next to nodes.js and never carries data.
+    """
+    if fcntl is None:
+        yield
+        return
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lockfile = DATA_DIR / ".nodes.lock"
+    f = open(lockfile, "w")
+    try:
+        # Block until we have an exclusive lock — hook calls are short, so
+        # contention is rare and brief.
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+
 def append_node(node: dict) -> None:
-    nodes = load_nodes()
-    seq = len(nodes) + 1
-    ts = node.get("ts") or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    node.setdefault("ts", ts)
-    node.setdefault("id", new_id(seq, ts))
-    node.setdefault("session", "main")
-    node.setdefault("kind", "response")
-    node.setdefault("status", "completed")
-    node.setdefault("tags", [])
-    node.setdefault("blocks", [])
-    if "parents" not in node:
-        node["parents"] = [nodes[-1]["id"]] if nodes else []
-    # v1.2: attach turn_id if a turn is open. Don't override a pre-set one.
-    if "turn_id" not in node:
-        tid = current_turn_id()
-        if tid:
-            node["turn_id"] = tid
-    nodes.append(node)
-    save_nodes(nodes)
+    with nodes_lock():
+        nodes = load_nodes()
+        seq = len(nodes) + 1
+        ts = node.get("ts") or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        node.setdefault("ts", ts)
+        node.setdefault("id", new_id(seq, ts))
+        node.setdefault("session", "main")
+        node.setdefault("kind", "response")
+        node.setdefault("status", "completed")
+        node.setdefault("tags", [])
+        node.setdefault("blocks", [])
+        if "parents" not in node:
+            node["parents"] = [nodes[-1]["id"]] if nodes else []
+        # v1.2: attach turn_id if a turn is open. Don't override a pre-set one.
+        if "turn_id" not in node:
+            tid = current_turn_id()
+            if tid:
+                node["turn_id"] = tid
+        nodes.append(node)
+        save_nodes(nodes)
 
 
 # ─────────────────────────── Event handlers ───────────────────────────────

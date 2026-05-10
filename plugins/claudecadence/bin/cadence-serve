@@ -4,22 +4,26 @@
 Two modes:
 
     cadence-serve [PROJECT_DIR]
-        Serves a single project's timeline at http://localhost:4173/
-        (default behavior — a Python http.server rooted at
-        PROJECT_DIR/.claude/cadence/).
+        Serves a single project's timeline at http://localhost:<port>/
+        rooted at PROJECT_DIR/.claude/cadence/.
 
     cadence-serve --hub
-        Serves the cross-project hub at http://localhost:4173/
+        Serves the cross-project hub at http://localhost:<port>/
         with the home page that lists every cadence + status.
         URL routes:
             /              -> home.html (the hub home page)
             /registry.json -> the per-user cadence registry
             /c/<slug>/...  -> proxies into that cadence's project dir
 
+Port auto-detection: tries --port (default 4173), then walks +1 up to
++8 looking for a free port. The chosen port is written to
+.claude/cadence/.server.port (or hub equivalent) so slash commands can
+read it back.
+
 Defaults:
     PROJECT_DIR = $CLAUDE_PROJECT_DIR or $PWD
     HUB_DIR     = ~/.claude/cadence  (override with $CLAUDECADENCE_HUB_DIR)
-    PORT        = 4173 (env $CADENCE_PORT)
+    PORT base   = 4173 (env $CADENCE_PORT)
     HOST        = 0.0.0.0  (so Tailscale / LAN can reach it)
 """
 
@@ -29,6 +33,7 @@ import argparse
 import http.server
 import json
 import os
+import socket
 import socketserver
 import sys
 import threading
@@ -40,6 +45,18 @@ from urllib.parse import unquote
 
 def hub_dir() -> Path:
     return Path(os.environ.get("CLAUDECADENCE_HUB_DIR") or (Path.home() / ".claude" / "cadence"))
+
+
+def find_free_port(host: str, base: int, span: int = 8) -> int | None:
+    """Return the first free TCP port in [base, base+span]. None if none free."""
+    for p in range(base, base + span + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, p))
+            except OSError:
+                continue
+            return p
+    return None
 
 
 def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandler]:
@@ -78,9 +95,15 @@ def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandle
         def log_message(self, *a, **kw):
             return  # quiet
 
+        def end_headers(self):
+            # Disable browser cache so the viewer always reads fresh data.
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            super().end_headers()
+
         def translate_path(self, path: str) -> str:
             clean = unquote(path.split("?", 1)[0].split("#", 1)[0])
-            # /c/<slug>/...  -> proxied per-cadence file
             if clean.startswith("/c/"):
                 rest = clean[len("/c/"):].lstrip("/")
                 if "/" not in rest:
@@ -90,21 +113,17 @@ def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandle
                 if rest_slug:
                     cdir = cadence_dir_for(rest_slug)
                     if cdir is not None:
-                        # Default the empty inner path to index.html.
                         if not rest_inner or rest_inner.endswith("/"):
                             rest_inner = (rest_inner or "") + "index.html"
                         target = cdir / rest_inner
-                        # Best-effort containment check.
                         try:
                             target.resolve().relative_to(cdir.resolve())
                         except (ValueError, RuntimeError):
-                            return str(hub_root / "404")  # falls through to 404
+                            return str(hub_root / "404")
                         return str(target)
                 return str(hub_root / "404")
-            # /  ->  home.html
             if clean in ("", "/"):
                 return str(hub_root / "home.html")
-            # everything else: serve from hub_root
             return super().translate_path(path)
 
     return HubHandler
@@ -118,16 +137,33 @@ def make_project_handler(cadence_dir: Path) -> type[http.server.SimpleHTTPReques
         def log_message(self, *a, **kw):
             return
 
+        def end_headers(self):
+            # No-cache so polling sees fresh nodes.js immediately.
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            super().end_headers()
+
     return ProjectHandler
+
+
+def write_port_file(target_dir: Path, port: int) -> None:
+    """Persist the port the server bound to so slash commands can read it back."""
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / ".server.port").write_text(str(port))
+    except OSError:
+        pass
 
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="cadence-serve")
     p.add_argument("project_dir", nargs="?", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     p.add_argument("--hub", action="store_true", help="serve the cross-project home page instead of one project")
-    p.add_argument("--port", type=int, default=int(os.environ.get("CADENCE_PORT", "4173")))
+    p.add_argument("--port", type=int, default=int(os.environ.get("CADENCE_PORT", "4173")), help="base port (auto-walks +1 if taken)")
     p.add_argument("--host", default=os.environ.get("CADENCE_HOST", "0.0.0.0"))
     p.add_argument("--no-open", action="store_true", help="do not auto-open the browser")
+    p.add_argument("--strict-port", action="store_true", help="fail if --port is taken (don't auto-walk)")
     args = p.parse_args()
 
     if args.hub:
@@ -141,6 +177,7 @@ def main() -> int:
             )
             return 2
         handler_cls = make_hub_handler(root)
+        target_dir = root
         label = f"hub {root}"
     else:
         cadence_dir = Path(args.project_dir) / ".claude" / "cadence"
@@ -152,20 +189,36 @@ def main() -> int:
             )
             return 2
         handler_cls = make_project_handler(cadence_dir)
+        target_dir = cadence_dir
         label = f"project {cadence_dir}"
 
+    # Pick a free port — auto-walk unless --strict-port.
+    if args.strict_port:
+        chosen_port = args.port
+    else:
+        chosen_port = find_free_port(args.host, args.port)
+        if chosen_port is None:
+            print(
+                f"[cadence-serve] no free port in {args.port}..{args.port + 8}. "
+                f"Pass --port N to pick a different base.",
+                file=sys.stderr,
+            )
+            return 2
+
     try:
-        # ThreadingTCPServer so multiple browser tabs can poll concurrently.
         class ReusableThreadingServer(socketserver.ThreadingTCPServer):
             allow_reuse_address = True
             daemon_threads = True
 
-        with ReusableThreadingServer((args.host, args.port), handler_cls) as srv:
+        with ReusableThreadingServer((args.host, chosen_port), handler_cls) as srv:
             display_host = "localhost" if args.host in ("0.0.0.0", "127.0.0.1") else args.host
-            url = f"http://{display_host}:{args.port}/"
+            url = f"http://{display_host}:{chosen_port}/"
+            write_port_file(target_dir, chosen_port)
             print(f"ClaudeCadence — serving {label}")
             print(f"  open: {url}")
-            print(f"  (Ctrl-C to stop)")
+            if chosen_port != args.port:
+                print(f"  (port {args.port} was taken — auto-picked {chosen_port})")
+            print(f"  (Ctrl-C to stop)", flush=True)
             if not args.no_open:
                 threading.Thread(
                     target=lambda: (time.sleep(0.4), webbrowser.open(url)),
@@ -177,8 +230,7 @@ def main() -> int:
                 print("\nStopped.")
                 return 0
     except OSError as exc:
-        print(f"[cadence-serve] could not bind {args.host}:{args.port} — {exc}", file=sys.stderr)
-        print(f"               Is something else using port {args.port}? Try --port 4174", file=sys.stderr)
+        print(f"[cadence-serve] could not bind {args.host}:{chosen_port} — {exc}", file=sys.stderr)
         return 2
 
     return 0
