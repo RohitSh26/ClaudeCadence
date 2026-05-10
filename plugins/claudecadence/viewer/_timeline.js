@@ -912,7 +912,7 @@
       ol.style.padding = '0';
       ol.style.margin = '0';
       ol.style.listStyle = 'none';
-      groupIntoTurns(selected.nodes).forEach(t => ol.appendChild(renderTurn(t)));
+      groupIntoTurns(selected.nodes).reverse().forEach(t => ol.appendChild(renderTurn(t)));
       pane.appendChild(ol);
     }
     shell.appendChild(pane);
@@ -1173,7 +1173,8 @@
       if (sessionIds.length > 1 && activeSession === 'all') {
         renderMultiSession(root, visible, sessionIds);
       } else {
-        const turns = groupIntoTurns(visible);
+        // Latest turn on top — descending chronological order.
+        const turns = groupIntoTurns(visible).reverse();
         turns.forEach(t => root.appendChild(renderTurn(t)));
       }
     }

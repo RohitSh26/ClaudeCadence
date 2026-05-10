@@ -510,14 +510,16 @@ mark {
   position: relative;
 }
 .workspace.wide { max-width: none; }
-/* Cap the prose-card column on ultra-wide screens so single-session timelines
-   stay readable even when the workspace itself is full-width. */
+/* Edge-to-edge — workspace padding handles the breathing room.
+   Single-session timeline + multi-session pane both fill the width. */
 .workspace > ol.timeline,
-.workspace > .viewer-shell:not(.is-multi) {
-  max-width: 1280px;
-  margin-left: auto;
-  margin-right: auto;
+.workspace > .viewer-shell {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
 }
+.session-pane > ol.timeline { width: 100%; max-width: none; }
 
 .workspace .session-strip {
   display: flex;

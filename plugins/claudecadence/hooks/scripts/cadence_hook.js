@@ -112,7 +112,8 @@ function bootstrapProject() {
   if (!fs.existsSync(NODES_JS)) {
     fs.writeFileSync(NODES_JS, NODES_HEADER + '[]' + NODES_FOOTER);
   }
-  if (!fs.existsSync(VIEWER_SOURCE)) return;
+  if (!fs.existsSync(VIEWER_SOURCE)) return 0;
+  let refreshed = 0;
   for (const entry of fs.readdirSync(VIEWER_SOURCE, { withFileTypes: true })) {
     const src = path.join(VIEWER_SOURCE, entry.name);
     const dst = path.join(CADENCE_DIR, entry.name);
@@ -123,9 +124,13 @@ function bootstrapProject() {
     }
     // File — refresh if hash differs (so plugin updates surface in browser).
     if (!fs.existsSync(dst) || fileSha(dst) !== fileSha(src)) {
-      try { fs.copyFileSync(src, dst); } catch (_) {}
+      try {
+        fs.copyFileSync(src, dst);
+        refreshed += 1;
+      } catch (_) {}
     }
   }
+  return refreshed;
 }
 
 function registerInHub(sessionId) {
@@ -284,19 +289,38 @@ function appendNode(node) {
 
 // ─────────────────────────── Auto-serve ──────────────────────────────────
 
-function maybeAutoServe() {
-  if (process.env.CLAUDECADENCE_NO_AUTO_SERVE) return null;
+function maybeAutoServe(opts) {
+  opts = opts || {};
   const pidfile  = path.join(CADENCE_DIR, '.server.pid');
   const portfile = path.join(CADENCE_DIR, '.server.port');
 
+  // Force-kill path runs BEFORE the env-var short-circuit, so a stale server
+  // gets bounced even when CLAUDECADENCE_NO_AUTO_SERVE is set.
   if (fs.existsSync(pidfile)) {
     const pid = parseInt(readTextOr(pidfile, '').trim(), 10);
     if (isPidAlive(pid)) {
-      const port = parseInt(readTextOr(portfile, '').trim(), 10);
-      return Number.isFinite(port) ? port : null;
+      if (opts.force) {
+        // Plugin update or explicit restart — kill the running server so we
+        // spawn a fresh one that picks up the new viewer files.
+        try { process.kill(pid, 'SIGTERM'); } catch (_) {}
+        const deadline = Date.now() + 500;
+        while (Date.now() < deadline && isPidAlive(pid)) {
+          const tEnd = Date.now() + 25;
+          while (Date.now() < tEnd) { /* busy */ }
+        }
+        if (isPidAlive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch (_) {} }
+        try { fs.unlinkSync(pidfile); } catch (_) {}
+        try { fs.unlinkSync(portfile); } catch (_) {}
+      } else {
+        const port = parseInt(readTextOr(portfile, '').trim(), 10);
+        return Number.isFinite(port) ? port : null;
+      }
+    } else {
+      try { fs.unlinkSync(pidfile); } catch (_) {}
     }
-    try { fs.unlinkSync(pidfile); } catch (_) {}
   }
+
+  if (process.env.CLAUDECADENCE_NO_AUTO_SERVE) return null;
 
   const serveBin = path.join(PLUGIN_ROOT, 'bin', 'cadence-serve');
   if (!fs.existsSync(serveBin)) return null;
@@ -345,11 +369,12 @@ function sessionIdOf(payload) {
 
 // ─────────────────────────── Event handlers ──────────────────────────────
 
-function handleSessionStart(payload) {
-  bootstrapProject();
-  const port = maybeAutoServe();
+function handleSessionStart(payload, ctx) {
+  const refreshed = (ctx && ctx.refreshed) || 0;
+  const port = maybeAutoServe({ force: refreshed > 0 });
   let summary = `Working in ${path.basename(PROJECT_DIR)}`;
   if (port) summary += ` — viewer at http://localhost:${port}/`;
+  if (refreshed > 0) summary += ` (refreshed ${refreshed} viewer file${refreshed === 1 ? '' : 's'})`;
   return {
     agent: 'external',
     kind: 'ci',
@@ -640,16 +665,23 @@ function main() {
     return 0;
   }
 
-  bootstrapProject();
+  const refreshed = bootstrapProject();
   try { registerInHub(payload.session_id); }
   catch (exc) { logErr(`hub registration failed: ${exc && exc.message || exc}`); }
 
+  // If the bootstrap refreshed any viewer file outside SessionStart, also bounce
+  // the running server so the user picks up the new files immediately. (The
+  // SessionStart handler does the same check via its ctx.refreshed param.)
   const event = payload.hook_event_name || '';
+  if (refreshed > 0 && event !== 'SessionStart') {
+    try { maybeAutoServe({ force: true }); } catch (_) {}
+  }
+
   const handler = HANDLERS[event];
   if (!handler) return 0;
 
   let node;
-  try { node = handler(payload); }
+  try { node = handler(payload, { refreshed }); }
   catch (exc) { logErr(`handler error (${event}): ${exc && exc.message || exc}`); return 0; }
 
   if (!node) return 0;

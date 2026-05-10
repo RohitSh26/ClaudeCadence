@@ -14,6 +14,16 @@
 
 set -euo pipefail
 
+FORCE=0
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --force) FORCE=1 ;;
+    *)       ARGS+=("$a") ;;
+  esac
+done
+set -- "${ARGS[@]:-}"
+
 PROJECT_DIR="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}"
 MODE="project"
 if [[ "${1:-}" == "--hub" ]]; then
@@ -40,12 +50,25 @@ LOG="$TARGET_DIR/.server.log"
 PIDFILE="$TARGET_DIR/.server.pid"
 PORTFILE="$TARGET_DIR/.server.port"
 
-# Idempotent: live server already running for this scope?
+# Idempotent unless --force: live server already running for this scope?
 if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-  PORT="$(cat "$PORTFILE" 2>/dev/null || echo 4173)"
-  echo "ClaudeCadence ${LABEL} already running (pid $(cat "$PIDFILE")) on port ${PORT}."
-  echo "Open: http://localhost:${PORT}/"
-  exit 0
+  RUNNING_PID="$(cat "$PIDFILE")"
+  if [[ "$FORCE" == "1" ]]; then
+    echo "ClaudeCadence ${LABEL} restarting (was pid ${RUNNING_PID})..."
+    kill "$RUNNING_PID" 2>/dev/null || true
+    # Wait briefly for the port to free, then SIGKILL if still alive.
+    for _ in 1 2 3 4 5 6 7 8; do
+      kill -0 "$RUNNING_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -9 "$RUNNING_PID" 2>/dev/null || true
+    rm -f "$PIDFILE" "$PORTFILE"
+  else
+    PORT="$(cat "$PORTFILE" 2>/dev/null || echo 4173)"
+    echo "ClaudeCadence ${LABEL} already running (pid ${RUNNING_PID}) on port ${PORT}."
+    echo "Open: http://localhost:${PORT}/"
+    exit 0
+  fi
 fi
 
 # Pick the most reliable detach mechanism for this OS.
