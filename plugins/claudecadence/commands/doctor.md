@@ -16,7 +16,17 @@ echo "PLUGIN_ROOT   ${CLAUDE_PLUGIN_ROOT:-(unset — not in a Claude Code sessio
 echo "HUB_DIR       $HUB_DIR"
 echo ""
 
+# 0. Node — required runtime (Claude Code already needs it)
+echo "── Runtime"
+if command -v node >/dev/null 2>&1; then
+  echo "  ✓ node $(node --version)"
+else
+  echo "  ✗ node NOT on PATH"
+  echo "    → install Node.js (https://nodejs.org). Claude Code itself needs it too."
+fi
+
 # 1. Plugin install reachable
+echo ""
 echo "── Plugin install"
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "$CLAUDE_PLUGIN_ROOT/bin/cadence-serve" ]; then
   echo "  ✓ binary at $CLAUDE_PLUGIN_ROOT/bin/cadence-serve"

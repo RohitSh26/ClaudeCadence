@@ -28,7 +28,7 @@ ClaudeCadence is the inverse view: a vertical timeline with branching lanes for 
 
 ## Status
 
-**v1.5 — multi-session UX.** A sidebar + detail-pane replaces the old multi-column view, so projects with many parallel sessions stay readable. The hub auto-prunes cadences whose project directories no longer exist, shows a *viewer up* indicator on cadences with a live local server, and gives each cadence a *forget* button. Earlier tags (v1.0–v1.3) had install reliability issues — they're marked as pre-release on GitHub. Use **v1.4.0 or later**. Issues + feature requests welcome at [github.com/RohitSh26/ClaudeCadence/issues](https://github.com/RohitSh26/ClaudeCadence/issues).
+**v1.6 — Node-only, no Python.** The hook handler and local server are now pure Node.js. Since Claude Code itself ships with Node, the plugin runs anywhere Claude Code runs — Windows-native included. Zero npm dependencies; built-ins only. (v1.5 introduced the sidebar + detail-pane multi-session UX, hub auto-prune, *viewer up* live indicator, and per-cadence *forget* button.) Earlier tags (v1.0–v1.3) had install reliability issues — they're marked as pre-release on GitHub. Use **v1.4.0 or later**. Issues + feature requests welcome at [github.com/RohitSh26/ClaudeCadence/issues](https://github.com/RohitSh26/ClaudeCadence/issues).
 
 If anything looks off after install, run **`/claudecadence:doctor`** in Claude Code — it prints a checklist of every component (hooks loaded, viewer files, server, registry, recent activity) and tells you what to fix.
 

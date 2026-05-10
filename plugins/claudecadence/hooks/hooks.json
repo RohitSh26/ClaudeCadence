@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.py\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cadence_hook.js\""
           }
         ]
       }

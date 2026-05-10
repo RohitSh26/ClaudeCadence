@@ -1,326 +1,354 @@
-#!/usr/bin/env python3
-"""ClaudeCadence — start the local viewer server.
+#!/usr/bin/env node
+/**
+ * ClaudeCadence — local viewer server (Node port, v1.6).
+ *
+ * Two modes:
+ *
+ *     cadence-serve [PROJECT_DIR]
+ *         Serves a single project's timeline at http://localhost:<port>/
+ *         rooted at PROJECT_DIR/.claude/cadence/.
+ *
+ *     cadence-serve --hub
+ *         Serves the cross-project hub at http://localhost:<port>/
+ *         with the home page that lists every cadence + status.
+ *         URL routes:
+ *             /                        -> home.html
+ *             /registry.json           -> auto-pruned registry (drops dead
+ *                                         project dirs); each entry augmented
+ *                                         with `live` (PID alive check).
+ *             /api/forget?slug=X (POST) -> remove a cadence from the registry
+ *             /c/<slug>/...            -> proxies into that cadence's project dir
+ *
+ * Port auto-detection: tries --port (default 4173), then walks +1 up to
+ * +8 looking for a free port. The chosen port is written to
+ * .claude/cadence/.server.port so slash commands can read it back.
+ *
+ * Zero npm dependencies — Node built-ins only.
+ */
 
-Two modes:
+'use strict';
 
-    cadence-serve [PROJECT_DIR]
-        Serves a single project's timeline at http://localhost:<port>/
-        rooted at PROJECT_DIR/.claude/cadence/.
+const fs   = require('fs');
+const path = require('path');
+const http = require('http');
+const net  = require('net');
+const os   = require('os');
+const url  = require('url');
+const { exec } = require('child_process');
 
-    cadence-serve --hub
-        Serves the cross-project hub at http://localhost:<port>/
-        with the home page that lists every cadence + status.
-        URL routes:
-            /              -> home.html (the hub home page)
-            /registry.json -> the per-user cadence registry
-            /c/<slug>/...  -> proxies into that cadence's project dir
+// ─────────────────────────── Args ────────────────────────────────────────
 
-Port auto-detection: tries --port (default 4173), then walks +1 up to
-+8 looking for a free port. The chosen port is written to
-.claude/cadence/.server.port (or hub equivalent) so slash commands can
-read it back.
+function parseArgs(argv) {
+  const args = {
+    project_dir: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+    hub: false,
+    port: parseInt(process.env.CADENCE_PORT || '4173', 10),
+    host: process.env.CADENCE_HOST || '0.0.0.0',
+    no_open: false,
+    strict_port: false,
+  };
+  const rest = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === '--hub')          args.hub = true;
+    else if (a === '--no-open') args.no_open = true;
+    else if (a === '--strict-port') args.strict_port = true;
+    else if (a === '--port')    { args.port = parseInt(argv[++i], 10); }
+    else if (a.startsWith('--port=')) { args.port = parseInt(a.slice('--port='.length), 10); }
+    else if (a === '--host')    { args.host = argv[++i]; }
+    else if (a.startsWith('--host=')) { args.host = a.slice('--host='.length); }
+    else if (!a.startsWith('--')) rest.push(a);
+  }
+  if (rest.length) args.project_dir = rest[0];
+  return args;
+}
 
-Defaults:
-    PROJECT_DIR = $CLAUDE_PROJECT_DIR or $PWD
-    HUB_DIR     = ~/.claude/cadence  (override with $CLAUDECADENCE_HUB_DIR)
-    PORT base   = 4173 (env $CADENCE_PORT)
-    HOST        = 0.0.0.0  (so Tailscale / LAN can reach it)
-"""
+function hubDir() {
+  return process.env.CLAUDECADENCE_HUB_DIR
+    ? path.resolve(process.env.CLAUDECADENCE_HUB_DIR)
+    : path.join(os.homedir(), '.claude', 'cadence');
+}
 
-from __future__ import annotations
+// ─────────────────────────── Port handling ───────────────────────────────
 
-import argparse
-import http.server
-import json
-import os
-import socket
-import socketserver
-import sys
-import threading
-import time
-import webbrowser
-from pathlib import Path
-from urllib.parse import unquote
+function tryBind(host, port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', () => resolve(false));
+    srv.once('listening', () => srv.close(() => resolve(true)));
+    srv.listen(port, host);
+  });
+}
 
+async function findFreePort(host, base, span) {
+  for (let p = base; p <= base + span; p += 1) {
+    if (await tryBind(host, p)) return p;
+  }
+  return null;
+}
 
-def hub_dir() -> Path:
-    return Path(os.environ.get("CLAUDECADENCE_HUB_DIR") or (Path.home() / ".claude" / "cadence"))
+function writePortFile(targetDir, port) {
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, '.server.port'), String(port));
+  } catch (_) {}
+}
 
+// ─────────────────────────── Hub helpers ─────────────────────────────────
 
-def find_free_port(host: str, base: int, span: int = 8) -> int | None:
-    """Return the first free TCP port in [base, base+span]. None if none free."""
-    for p in range(base, base + span + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind((host, p))
-            except OSError:
-                continue
-            return p
-    return None
+function isPidAlive(pid) {
+  if (!pid || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (_) { return false; }
+}
 
+function cadenceIsLive(projectPath) {
+  try {
+    const pidfile = path.join(projectPath, '.claude', 'cadence', '.server.pid');
+    if (!fs.existsSync(pidfile)) return false;
+    const pid = parseInt(fs.readFileSync(pidfile, 'utf8').trim(), 10);
+    return isPidAlive(pid);
+  } catch (_) { return false; }
+}
 
-def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandler]:
-    """Build a handler that maps:
-       /                -> hub_root/home.html (or index.html fallback)
-       /registry.json   -> auto-pruned registry (drops dead project dirs);
-                           augments each entry with `live` (PID alive check).
-       /api/forget?slug=X (POST) -> remove a cadence from the registry.
-       /c/<slug>/...    -> registry[slug].path/.claude/cadence/...
-       (everything else) -> hub_root/<path>
-    """
-    registry_cache: dict[str, dict] = {"data": {"cadences": []}, "ts": 0.0}
-    write_lock = threading.Lock()
+function loadRegistry(hubRoot) {
+  const p = path.join(hubRoot, 'registry.json');
+  if (!fs.existsSync(p)) return { cadences: [] };
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+  catch (_) { return { cadences: [] }; }
+}
 
-    def load_registry() -> dict:
-        reg_path = hub_root / "registry.json"
-        if not reg_path.exists():
-            return {"cadences": []}
-        try:
-            return json.loads(reg_path.read_text())
-        except json.JSONDecodeError:
-            return {"cadences": []}
+function saveRegistry(hubRoot, reg) {
+  const p = path.join(hubRoot, 'registry.json');
+  const tmp = p + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(reg, null, 2));
+  fs.renameSync(tmp, p);
+}
 
-    def save_registry(reg: dict) -> None:
-        reg_path = hub_root / "registry.json"
-        with write_lock:
-            tmp = reg_path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(reg, indent=2))
-            tmp.replace(reg_path)
+function pruneDead(reg) {
+  const kept = [];
+  let changed = false;
+  for (const c of (reg.cadences || [])) {
+    if (!c.path) { changed = true; continue; }
+    const cd = path.join(c.path, '.claude', 'cadence');
+    if (!fs.existsSync(cd)) { changed = true; continue; }
+    kept.push(c);
+  }
+  return { newReg: { ...reg, cadences: kept }, changed };
+}
 
-    def pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-        except (OSError, ProcessLookupError):
-            return False
-        return True
+// ─────────────────────────── Static serving ──────────────────────────────
 
-    def cadence_is_live(path_str: str) -> bool:
-        try:
-            pidfile = Path(path_str) / ".claude" / "cadence" / ".server.pid"
-            if not pidfile.exists():
-                return False
-            return pid_alive(int(pidfile.read_text().strip()))
-        except (OSError, ValueError):
-            return False
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.ico':  'image/x-icon',
+  '.txt':  'text/plain; charset=utf-8',
+  '.md':   'text/markdown; charset=utf-8',
+};
+function mimeFor(p) { return MIME[path.extname(p).toLowerCase()] || 'application/octet-stream'; }
 
-    def prune_dead(reg: dict) -> tuple[dict, bool]:
-        """Drop cadences whose project dir or .claude/cadence dir no longer exists.
-        Returns (new_reg, was_changed)."""
-        kept = []
-        changed = False
-        for c in reg.get("cadences", []):
-            pth = c.get("path")
-            if not pth:
-                changed = True
-                continue
-            cd = Path(pth) / ".claude" / "cadence"
-            if not cd.exists():
-                changed = True
-                continue
-            kept.append(c)
-        return ({"cadences": kept}, changed)
+function noCacheHeaders() {
+  return {
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
+}
 
-    def cadence_dir_for(slug: str) -> Path | None:
-        # 1s-cached read of registry to avoid hammering the disk per request.
-        now = time.monotonic()
-        if now - registry_cache["ts"] > 1.0:
-            registry_cache["data"] = load_registry()
-            registry_cache["ts"] = now
-        for c in registry_cache["data"].get("cadences", []):
-            if c.get("slug") == slug:
-                return Path(c["path"]) / ".claude" / "cadence"
-        return None
+function safeJoin(rootAbs, relUnsafe) {
+  // Prevent .. escapes. Returns null if the resolved path escapes root.
+  const candidate = path.resolve(rootAbs, '.' + path.posix.normalize('/' + relUnsafe));
+  const rootResolved = path.resolve(rootAbs);
+  if (candidate !== rootResolved && !candidate.startsWith(rootResolved + path.sep)) return null;
+  return candidate;
+}
 
-    class HubHandler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(hub_root), **kw)
+function serveFile(res, fpath) {
+  fs.stat(fpath, (err, st) => {
+    if (err || !st.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    const headers = Object.assign({
+      'Content-Type': mimeFor(fpath),
+      'Content-Length': st.size,
+      'Last-Modified': st.mtime.toUTCString(),
+    }, noCacheHeaders());
+    res.writeHead(200, headers);
+    fs.createReadStream(fpath).pipe(res);
+  });
+}
 
-        def log_message(self, *a, **kw):
-            return  # quiet
+function sendJson(res, status, payload) {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8');
+  res.writeHead(status, Object.assign({
+    'Content-Type': 'application/json',
+    'Content-Length': body.length,
+  }, noCacheHeaders()));
+  res.end(body);
+}
 
-        def end_headers(self):
-            # Disable browser cache so the viewer always reads fresh data.
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            super().end_headers()
+// ─────────────────────────── Hub handler ─────────────────────────────────
 
-        def _send_json(self, status: int, payload: dict) -> None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+function makeHubHandler(hubRoot) {
+  return function (req, res) {
+    const u = url.parse(req.url, true);
+    const clean = decodeURIComponent(u.pathname || '/');
 
-        def do_GET(self):
-            clean = unquote(self.path.split("?", 1)[0].split("#", 1)[0])
-            if clean == "/registry.json":
-                reg = load_registry()
-                pruned, changed = prune_dead(reg)
-                if changed:
-                    save_registry(pruned)
-                    registry_cache["ts"] = 0.0  # invalidate
-                for c in pruned.get("cadences", []):
-                    c["live"] = cadence_is_live(c.get("path", ""))
-                self._send_json(200, pruned)
-                return
-            super().do_GET()
+    // GET /registry.json — prune dead, augment with `live`.
+    if (req.method === 'GET' && clean === '/registry.json') {
+      const reg = loadRegistry(hubRoot);
+      const { newReg, changed } = pruneDead(reg);
+      if (changed) {
+        try { saveRegistry(hubRoot, newReg); } catch (_) {}
+      }
+      for (const c of newReg.cadences) c.live = cadenceIsLive(c.path || '');
+      sendJson(res, 200, newReg);
+      return;
+    }
 
-        def do_POST(self):
-            clean = self.path.split("?", 1)[0]
-            if clean == "/api/forget":
-                from urllib.parse import parse_qs
-                qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-                slug = (qs.get("slug") or [""])[0]
-                if not slug:
-                    self._send_json(400, {"error": "missing slug"})
-                    return
-                reg = load_registry()
-                before = len(reg.get("cadences", []))
-                reg["cadences"] = [c for c in reg.get("cadences", []) if c.get("slug") != slug]
-                save_registry(reg)
-                registry_cache["ts"] = 0.0
-                self._send_json(200, {"removed": before - len(reg["cadences"]), "slug": slug})
-                return
-            self.send_response(404)
-            self.end_headers()
+    // POST /api/forget?slug=X — remove a cadence from the registry.
+    if (req.method === 'POST' && clean === '/api/forget') {
+      const slug = (u.query && u.query.slug) || '';
+      if (!slug) { sendJson(res, 400, { error: 'missing slug' }); return; }
+      const reg = loadRegistry(hubRoot);
+      const before = (reg.cadences || []).length;
+      reg.cadences = (reg.cadences || []).filter(c => c.slug !== slug);
+      try { saveRegistry(hubRoot, reg); } catch (_) {}
+      sendJson(res, 200, { removed: before - reg.cadences.length, slug });
+      return;
+    }
 
-        def translate_path(self, path: str) -> str:
-            clean = unquote(path.split("?", 1)[0].split("#", 1)[0])
-            if clean.startswith("/c/"):
-                rest = clean[len("/c/"):].lstrip("/")
-                if "/" not in rest:
-                    rest_slug, rest_inner = rest, ""
-                else:
-                    rest_slug, rest_inner = rest.split("/", 1)
-                if rest_slug:
-                    cdir = cadence_dir_for(rest_slug)
-                    if cdir is not None:
-                        if not rest_inner or rest_inner.endswith("/"):
-                            rest_inner = (rest_inner or "") + "index.html"
-                        target = cdir / rest_inner
-                        try:
-                            target.resolve().relative_to(cdir.resolve())
-                        except (ValueError, RuntimeError):
-                            return str(hub_root / "404")
-                        return str(target)
-                return str(hub_root / "404")
-            if clean in ("", "/"):
-                return str(hub_root / "home.html")
-            return super().translate_path(path)
+    // /c/<slug>/... — proxy into the project's .claude/cadence/.
+    if (req.method === 'GET' && clean.startsWith('/c/')) {
+      const rest = clean.slice('/c/'.length).replace(/^\/+/, '');
+      const slashIdx = rest.indexOf('/');
+      const slug    = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
+      let inner    = slashIdx === -1 ? '' : rest.slice(slashIdx + 1);
+      if (!slug) { res.writeHead(404); res.end(); return; }
+      const reg = loadRegistry(hubRoot);
+      const c = (reg.cadences || []).find(x => x.slug === slug);
+      if (!c) { res.writeHead(404); res.end(); return; }
+      if (!inner || inner.endsWith('/')) inner = (inner || '') + 'index.html';
+      const cdir = path.join(c.path, '.claude', 'cadence');
+      const target = safeJoin(cdir, inner);
+      if (!target) { res.writeHead(404); res.end(); return; }
+      serveFile(res, target);
+      return;
+    }
 
-    return HubHandler
+    // Default: static file out of the hub root.
+    if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+    let relPath = clean === '/' ? '/home.html' : clean;
+    if (relPath.endsWith('/')) relPath += 'index.html';
+    const target = safeJoin(hubRoot, relPath);
+    if (!target) { res.writeHead(404); res.end(); return; }
+    serveFile(res, target);
+  };
+}
 
+// ─────────────────────────── Project handler ─────────────────────────────
 
-def make_project_handler(cadence_dir: Path) -> type[http.server.SimpleHTTPRequestHandler]:
-    class ProjectHandler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(cadence_dir), **kw)
+function makeProjectHandler(cadenceDir) {
+  return function (req, res) {
+    if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+    const u = url.parse(req.url);
+    let clean = decodeURIComponent(u.pathname || '/');
+    if (clean === '/' || clean.endsWith('/')) clean = (clean || '/') + 'index.html';
+    const target = safeJoin(cadenceDir, clean);
+    if (!target) { res.writeHead(404); res.end(); return; }
+    serveFile(res, target);
+  };
+}
 
-        def log_message(self, *a, **kw):
-            return
+// ─────────────────────────── Main ────────────────────────────────────────
 
-        def end_headers(self):
-            # No-cache so polling sees fresh nodes.js immediately.
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            super().end_headers()
+function openInBrowser(targetUrl) {
+  // Best-effort cross-platform open. Failure is silent.
+  let cmd;
+  if (process.platform === 'darwin')      cmd = `open "${targetUrl}"`;
+  else if (process.platform === 'win32')  cmd = `start "" "${targetUrl}"`;
+  else                                    cmd = `xdg-open "${targetUrl}"`;
+  exec(cmd, () => {});
+}
 
-    return ProjectHandler
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
 
+  let handler;
+  let targetDir;
+  let label;
 
-def write_port_file(target_dir: Path, port: int) -> None:
-    """Persist the port the server bound to so slash commands can read it back."""
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / ".server.port").write_text(str(port))
-    except OSError:
-        pass
+  if (args.hub) {
+    const root = hubDir();
+    if (!fs.existsSync(path.join(root, 'home.html'))) {
+      process.stderr.write(
+        `[cadence-serve] ${root}/home.html doesn't exist yet.\n` +
+        `               Run any Claude Code session with the plugin enabled first; the hook will\n` +
+        `               populate the hub directory on its first fire.\n`
+      );
+      return 2;
+    }
+    handler = makeHubHandler(root);
+    targetDir = root;
+    label = `hub ${root}`;
+  } else {
+    const cadenceDir = path.join(args.project_dir, '.claude', 'cadence');
+    if (!fs.existsSync(cadenceDir)) {
+      process.stderr.write(
+        `[cadence-serve] ${cadenceDir} doesn't exist yet.\n` +
+        `               Hooks haven't fired in this project. Open Claude Code and do something first.\n`
+      );
+      return 2;
+    }
+    handler = makeProjectHandler(cadenceDir);
+    targetDir = cadenceDir;
+    label = `project ${cadenceDir}`;
+  }
 
+  const chosenPort = args.strict_port
+    ? args.port
+    : await findFreePort(args.host, args.port, 8);
+  if (chosenPort === null) {
+    process.stderr.write(
+      `[cadence-serve] no free port in ${args.port}..${args.port + 8}. ` +
+      `Pass --port N to pick a different base.\n`
+    );
+    return 2;
+  }
 
-def main() -> int:
-    p = argparse.ArgumentParser(prog="cadence-serve")
-    p.add_argument("project_dir", nargs="?", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
-    p.add_argument("--hub", action="store_true", help="serve the cross-project home page instead of one project")
-    p.add_argument("--port", type=int, default=int(os.environ.get("CADENCE_PORT", "4173")), help="base port (auto-walks +1 if taken)")
-    p.add_argument("--host", default=os.environ.get("CADENCE_HOST", "0.0.0.0"))
-    p.add_argument("--no-open", action="store_true", help="do not auto-open the browser")
-    p.add_argument("--strict-port", action="store_true", help="fail if --port is taken (don't auto-walk)")
-    args = p.parse_args()
+  const server = http.createServer(handler);
+  server.on('error', (err) => {
+    process.stderr.write(`[cadence-serve] could not bind ${args.host}:${chosenPort} — ${err.message}\n`);
+    process.exit(2);
+  });
+  server.listen(chosenPort, args.host, () => {
+    const displayHost = (args.host === '0.0.0.0' || args.host === '127.0.0.1') ? 'localhost' : args.host;
+    const targetUrl = `http://${displayHost}:${chosenPort}/`;
+    writePortFile(targetDir, chosenPort);
+    process.stdout.write(`ClaudeCadence — serving ${label}\n`);
+    process.stdout.write(`  open: ${targetUrl}\n`);
+    if (chosenPort !== args.port) {
+      process.stdout.write(`  (port ${args.port} was taken — auto-picked ${chosenPort})\n`);
+    }
+    process.stdout.write(`  (Ctrl-C to stop)\n`);
+    if (!args.no_open) setTimeout(() => openInBrowser(targetUrl), 400);
+  });
 
-    if args.hub:
-        root = hub_dir()
-        if not (root / "home.html").exists():
-            print(
-                f"[cadence-serve] {root}/home.html doesn't exist yet.\n"
-                f"               Run any Claude Code session with the plugin enabled first; the hook will\n"
-                f"               populate the hub directory on its first fire.",
-                file=sys.stderr,
-            )
-            return 2
-        handler_cls = make_hub_handler(root)
-        target_dir = root
-        label = f"hub {root}"
-    else:
-        cadence_dir = Path(args.project_dir) / ".claude" / "cadence"
-        if not cadence_dir.exists():
-            print(
-                f"[cadence-serve] {cadence_dir} doesn't exist yet.\n"
-                f"               Hooks haven't fired in this project. Open Claude Code and do something first.",
-                file=sys.stderr,
-            )
-            return 2
-        handler_cls = make_project_handler(cadence_dir)
-        target_dir = cadence_dir
-        label = f"project {cadence_dir}"
+  process.on('SIGINT',  () => { server.close(() => process.exit(0)); });
+  process.on('SIGTERM', () => { server.close(() => process.exit(0)); });
+  return 0;
+}
 
-    # Pick a free port — auto-walk unless --strict-port.
-    if args.strict_port:
-        chosen_port = args.port
-    else:
-        chosen_port = find_free_port(args.host, args.port)
-        if chosen_port is None:
-            print(
-                f"[cadence-serve] no free port in {args.port}..{args.port + 8}. "
-                f"Pass --port N to pick a different base.",
-                file=sys.stderr,
-            )
-            return 2
-
-    try:
-        class ReusableThreadingServer(socketserver.ThreadingTCPServer):
-            allow_reuse_address = True
-            daemon_threads = True
-
-        with ReusableThreadingServer((args.host, chosen_port), handler_cls) as srv:
-            display_host = "localhost" if args.host in ("0.0.0.0", "127.0.0.1") else args.host
-            url = f"http://{display_host}:{chosen_port}/"
-            write_port_file(target_dir, chosen_port)
-            print(f"ClaudeCadence — serving {label}")
-            print(f"  open: {url}")
-            if chosen_port != args.port:
-                print(f"  (port {args.port} was taken — auto-picked {chosen_port})")
-            print(f"  (Ctrl-C to stop)", flush=True)
-            if not args.no_open:
-                threading.Thread(
-                    target=lambda: (time.sleep(0.4), webbrowser.open(url)),
-                    daemon=True,
-                ).start()
-            try:
-                srv.serve_forever()
-            except KeyboardInterrupt:
-                print("\nStopped.")
-                return 0
-    except OSError as exc:
-        print(f"[cadence-serve] could not bind {args.host}:{chosen_port} — {exc}", file=sys.stderr)
-        return 2
-
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+main().catch((err) => {
+  process.stderr.write(`[cadence-serve] fatal: ${err && err.stack || err}\n`);
+  process.exit(2);
+});

@@ -55,7 +55,7 @@ else
   DETACH=(nohup)
 fi
 
-"${DETACH[@]}" python3 "$PLUGIN_ROOT/bin/cadence-serve" "${SERVE_ARGS[@]}" \
+"${DETACH[@]}" node "$PLUGIN_ROOT/bin/cadence-serve" "${SERVE_ARGS[@]}" \
   > "$LOG" 2>&1 &
 PID=$!
 echo "$PID" > "$PIDFILE"
