@@ -390,6 +390,16 @@ function handleUserPrompt(payload) {
   const prompt = (payload.prompt || '').trim();
   if (!prompt) return null;
   const tid = beginTurn();
+  // Push this turn onto the per-session FIFO with the current "lower bound"
+  // (latest assistant ts in transcript right now). Stop will pop it later
+  // and only consider assistant texts that arrived AFTER this lower bound.
+  try {
+    pushPendingTurn(
+      sessionIdOf(payload),
+      tid,
+      latestAssistantTs(payload.transcript_path) || ''
+    );
+  } catch (_) {}
   const isSlash = prompt.startsWith('/');
   const titleLine = prompt.split('\n', 1)[0];
   const title = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : titleLine;
@@ -620,31 +630,101 @@ function lastAssistantText(transcriptPath) {
   return null;
 }
 
-// Count response nodes already captured for this session — tells us which
-// transcript assistant message THIS Stop corresponds to.
-function priorResponseCount(session) {
-  const nodes = loadNodes();
-  let count = 0;
-  for (const n of nodes) {
-    if ((n.session || 'main') !== session) continue;
-    if ((n.tags || []).indexOf('response') !== -1) count += 1;
-  }
-  return count;
+// ─── Pending-stop queue + per-session cursor ──────────────────────────────
+// The transcript contains many "user" entries that don't correspond to OUR
+// UserPromptSubmit hooks (slash command meta, tool results, internal recaps).
+// Counting transcript entries against our captured Stop count produces drift.
+//
+// Robust approach: on every UserPromptSubmit, push a turn record to a
+// per-session FIFO queue. On every Stop, pop the OLDEST queued turn and
+// pair it with the first NEW assistant text in the transcript, advancing a
+// per-session cursor as we consume. Combines:
+//   - FIFO queue (handles rapid-fire — Stops fire in submission order)
+//   - lower-bound ts per turn (excludes asst messages older than the UPS)
+//   - global cursor (excludes anything we've already consumed)
+//   - polling (defeats the transcript-flush race observed in real sessions)
+
+function queueFile(session)  { return path.join(CADENCE_DIR, `.queue-${session}.txt`);  }
+function cursorFile(session) { return path.join(CADENCE_DIR, `.cursor-${session}.txt`); }
+
+function pushPendingTurn(session, turnId, lowerBoundTs) {
+  const f = queueFile(session);
+  const line = `${turnId || ''}|${lowerBoundTs || ''}\n`;
+  try { fs.appendFileSync(f, line); } catch (_) {}
 }
 
-// Wait briefly for the (N)th assistant text to appear. Stop hook fires the
-// same second the transcript is being written; without polling we lose the
-// race ~half the time and capture the PREVIOUS turn's text.
-function waitForNthAssistantText(transcriptPath, n, maxWaitMs) {
+function popPendingTurn(session) {
+  const f = queueFile(session);
+  if (!fs.existsSync(f)) return null;
+  let raw; try { raw = fs.readFileSync(f, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n').filter(Boolean);
+  if (!lines.length) { try { fs.unlinkSync(f); } catch (_) {} return null; }
+  const head = lines.shift();
+  try {
+    if (lines.length) fs.writeFileSync(f, lines.join('\n') + '\n');
+    else fs.unlinkSync(f);
+  } catch (_) {}
+  const [turnId, lowerBoundTs] = head.split('|');
+  return { turnId: turnId || null, lowerBoundTs: lowerBoundTs || null };
+}
+
+function readCursor(session) {
+  try { return fs.readFileSync(cursorFile(session), 'utf8').trim() || null; }
+  catch (_) { return null; }
+}
+function writeCursor(session, ts) {
+  try { fs.writeFileSync(cursorFile(session), String(ts)); } catch (_) {}
+}
+
+// Latest assistant TEXT timestamp in the transcript right now (or null).
+function latestAssistantTs(transcriptPath) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n');
+  let latest = null;
+  for (const ln of lines) {
+    const t = ln.trim(); if (!t) continue;
+    let o; try { o = JSON.parse(t); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'assistant') continue;
+    const text = extractAssistantText(o);
+    if (!text) continue;
+    const ts = o.timestamp || o.ts || (o.message && (o.message.created_at || o.message.timestamp)) || null;
+    if (ts && (!latest || ts > latest)) latest = ts;
+  }
+  return latest;
+}
+
+// First (earliest) assistant TEXT in the transcript with ts strictly greater
+// than the supplied cursor. Returns { ts, text } or null.
+function firstAssistantTextAfter(transcriptPath, cursor) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n');
+  let best = null;
+  for (const ln of lines) {
+    const t = ln.trim(); if (!t) continue;
+    let o; try { o = JSON.parse(t); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'assistant') continue;
+    const text = extractAssistantText(o);
+    if (!text) continue;
+    const ts = o.timestamp || o.ts || (o.message && (o.message.created_at || o.message.timestamp)) || null;
+    if (!ts) continue;
+    if (cursor && ts <= cursor) continue;
+    if (!best || ts < best.ts) best = { ts, text };
+  }
+  return best;
+}
+
+function waitForFirstAssistantTextAfter(transcriptPath, cursor, maxWaitMs) {
   maxWaitMs = maxWaitMs || 3000;
   const deadline = Date.now() + maxWaitMs;
-  let text = nthAssistantText(transcriptPath, n);
-  if (text) return text;
+  let item = firstAssistantTextAfter(transcriptPath, cursor);
+  if (item) return item;
   while (Date.now() < deadline) {
     const wakeAt = Date.now() + 80;
     while (Date.now() < wakeAt) { /* spin */ }
-    text = nthAssistantText(transcriptPath, n);
-    if (text) return text;
+    item = firstAssistantTextAfter(transcriptPath, cursor);
+    if (item) return item;
   }
   return null;
 }
@@ -677,15 +757,28 @@ function pendingPromptTurnId(session) {
 
 function handleStop(payload) {
   const session = sessionIdOf(payload);
-  const tid = pendingPromptTurnId(session) || currentTurnId();
-  // The Stop hook fires concurrently with the transcript flush. Counting the
-  // response nodes we've already captured tells us this Stop is for the
-  // (N+1)th assistant message — wait briefly for it to land in the transcript
-  // rather than reading whatever happens to be the latest right now.
-  const targetIdx = priorResponseCount(session) + 1;
-  let text = waitForNthAssistantText(payload.transcript_path, targetIdx);
-  // Last-resort fallback if even the wait fails.
-  if (!text) text = lastAssistantText(payload.transcript_path);
+  // 1) Pop the oldest queued turn (FIFO with the corresponding UPS).
+  const popped = popPendingTurn(session);
+  // turn_id preference order: popped (most accurate) → data scan → file state.
+  const tid = (popped && popped.turnId) || pendingPromptTurnId(session) || currentTurnId();
+  // 2) Effective cursor = max(global cursor, this turn's lower bound). This
+  //    excludes any assistant text that existed BEFORE this turn's UPS, and
+  //    anything we've already paired with a previous Stop.
+  const globalCursor = readCursor(session);
+  const lowerBound = popped && popped.lowerBoundTs ? popped.lowerBoundTs : null;
+  let effective = globalCursor || null;
+  if (lowerBound && (!effective || lowerBound > effective)) effective = lowerBound;
+  // 3) Poll the transcript for the FIRST new assistant text after the cursor.
+  //    Stop fires the same second the transcript is being written; wait it out.
+  const item = waitForFirstAssistantTextAfter(payload.transcript_path, effective);
+  let text = null;
+  if (item) {
+    text = item.text;
+    writeCursor(session, item.ts);
+  } else {
+    // Last-resort fallback — better something than nothing for the timeline.
+    text = lastAssistantText(payload.transcript_path);
+  }
   let node;
   if (text) {
     const firstLine = text.split('\n', 1)[0].trim();
