@@ -389,16 +389,23 @@ function handleSessionStart(payload, ctx) {
 function handleUserPrompt(payload) {
   const prompt = (payload.prompt || '').trim();
   if (!prompt) return null;
+  const session = sessionIdOf(payload);
   const tid = beginTurn();
   // Push this turn onto the per-session FIFO with the current "lower bound"
   // (latest assistant ts in transcript right now). Stop will pop it later
   // and only consider assistant texts that arrived AFTER this lower bound.
   try {
     pushPendingTurn(
-      sessionIdOf(payload),
+      session,
       tid,
       latestAssistantTs(payload.transcript_path) || ''
     );
+  } catch (_) {}
+  // Advance the prompt cursor past this just-fired UPS prompt so the catch-up
+  // scan in Stop/SubagentStop won't synthesize a duplicate of it.
+  try {
+    const latestPromptTs = latestUserPromptTs(payload.transcript_path);
+    if (latestPromptTs) writePromptCursor(session, latestPromptTs);
   } catch (_) {}
   const isSlash = prompt.startsWith('/');
   const titleLine = prompt.split('\n', 1)[0];
@@ -413,7 +420,7 @@ function handleUserPrompt(payload) {
     title,
     summary,
     tags: ['prompt'].concat(isSlash ? ['slash'] : []),
-    session: sessionIdOf(payload),
+    session,
     turn_id: tid,
     blocks,
   };
@@ -563,7 +570,10 @@ function handlePostToolUse(payload) {
 function handleSubagentStop(payload) {
   const session = sessionIdOf(payload);
   const sub = payload.subagent_type || payload.agent_type || payload.agent || 'subagent';
-  return {
+  // Catch up any user prompts that bypassed UPS (orchestrator/remote-control).
+  // Synthetic nodes come first so they appear before the merge in the timeline.
+  const synthesized = catchUpUserPrompts(payload.transcript_path, session);
+  const mergeNode = {
     agent: String(sub),
     kind: 'merge',
     status: 'completed',
@@ -572,6 +582,7 @@ function handleSubagentStop(payload) {
     tags: ['subagent', 'stop', String(sub)],
     session,
   };
+  return synthesized.length ? synthesized.concat([mergeNode]) : mergeNode;
 }
 
 function extractAssistantText(obj) {
@@ -674,6 +685,117 @@ function readCursor(session) {
 }
 function writeCursor(session, ts) {
   try { fs.writeFileSync(cursorFile(session), String(ts)); } catch (_) {}
+}
+
+// ─── User-prompt catch-up (orchestrator + dropped-UPS recovery) ──────────
+// In normal Claude Code sessions, UserPromptSubmit fires for every human
+// prompt. But in orchestrator/remote-control sessions, Claude is mid-turn
+// when the user injects a new prompt; UPS doesn't fire and the prompt is
+// invisible to Cadence even though it's sitting in the transcript.
+//
+// On every Stop and SubagentStop, we scan the transcript for plain-string
+// user entries past the prompt cursor that aren't system injections and
+// haven't been captured as nodes yet. Each one becomes a synthetic prompt
+// node tagged 'synthesized'. The cursor advances so we don't re-emit them.
+//
+// UPS itself advances the cursor in handleUserPrompt, so normally the scan
+// finds nothing new and is a cheap no-op. The cost is only paid when there's
+// actually a missed prompt to recover.
+
+function promptCursorFile(session) { return path.join(CADENCE_DIR, `.prompt-cursor-${session}.txt`); }
+function readPromptCursor(session) {
+  try { return fs.readFileSync(promptCursorFile(session), 'utf8').trim() || null; }
+  catch (_) { return null; }
+}
+function writePromptCursor(session, ts) {
+  try { fs.writeFileSync(promptCursorFile(session), String(ts)); } catch (_) {}
+}
+
+// Claude Code injects synthetic user-string entries (system reminders, slash
+// command stubs, command stdout). These look like user prompts to the
+// transcript but aren't human input.
+function isSystemInjection(text) {
+  if (!text) return true;
+  const head = text.trimStart();
+  return /^<(system-reminder|local-command-|command-name|command-message|command-args|command-stdout|command-stderr)/.test(head);
+}
+
+// Latest user-prompt TEXT timestamp in the transcript right now (or null).
+// Used to advance the prompt cursor when UPS fires normally.
+function latestUserPromptTs(transcriptPath) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+  let latest = null;
+  for (const ln of raw.split('\n')) {
+    const t = ln.trim(); if (!t) continue;
+    let o; try { o = JSON.parse(t); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'user') continue;
+    const c = o.message && o.message.content;
+    if (typeof c !== 'string') continue;
+    if (isSystemInjection(c)) continue;
+    const ts = o.timestamp || o.ts || null;
+    if (ts && (!latest || ts > latest)) latest = ts;
+  }
+  return latest;
+}
+
+// Scan transcript for human user prompts past the prompt cursor that haven't
+// been captured. Returns array of synthetic prompt nodes (possibly empty).
+// On first run for a session (no cursor), seeds the cursor to the latest user
+// prompt ts so we don't backfill an entire pre-existing session as duplicates.
+function catchUpUserPrompts(transcriptPath, session) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return [];
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return []; }
+
+  const cursor = readPromptCursor(session);
+
+  // First-run seed: if no cursor exists, snap to "now" — don't synthesize the
+  // entire transcript history as duplicates of nodes that may already exist.
+  if (!cursor) {
+    const latest = latestUserPromptTs(transcriptPath);
+    if (latest) writePromptCursor(session, latest);
+    return [];
+  }
+
+  const nodes = [];
+  let latestTs = cursor;
+  for (const ln of raw.split('\n')) {
+    const t = ln.trim(); if (!t) continue;
+    let o; try { o = JSON.parse(t); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'user') continue;
+    const c = o.message && o.message.content;
+    if (typeof c !== 'string') continue;
+    if (isSystemInjection(c)) continue;
+    const ts = o.timestamp || o.ts || null;
+    if (!ts || ts <= cursor) continue;
+
+    const prompt = c.trim();
+    if (!prompt) continue;
+
+    const tid = beginTurn();
+    const titleLine = prompt.split('\n', 1)[0];
+    const title = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : titleLine;
+    let summary = prompt.slice(0, 160).replace(/\n/g, ' ').trim();
+    if (prompt.length > 160) summary += '…';
+    const isSlash = prompt.startsWith('/');
+
+    nodes.push({
+      agent: 'founder',
+      kind: isSlash ? 'decision' : 'response',
+      status: 'completed',
+      title,
+      summary,
+      tags: ['prompt', 'synthesized'].concat(isSlash ? ['slash'] : []),
+      session,
+      turn_id: tid,
+      ts,
+      blocks: [{ type: 'markdown', value: prompt.slice(0, 200000) }],
+    });
+    if (ts > latestTs) latestTs = ts;
+  }
+
+  if (latestTs !== cursor) writePromptCursor(session, latestTs);
+  return nodes;
 }
 
 // Latest assistant TEXT timestamp in the transcript right now (or null).
@@ -867,7 +989,11 @@ function handleStop(payload) {
   }
   if (tid) node.turn_id = tid;
   endTurn();
-  return node;
+  // Catch up any user prompts that bypassed UPS (orchestrator/remote-control,
+  // or a UPS that failed silently). Synthetic prompts come BEFORE the response
+  // so the timeline reads in causal order.
+  const synthesized = catchUpUserPrompts(payload.transcript_path, session);
+  return synthesized.length ? synthesized.concat([node]) : node;
 }
 
 const HANDLERS = {
