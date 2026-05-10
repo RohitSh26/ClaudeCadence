@@ -2874,6 +2874,11 @@ mark {
   background: var(--bone);
 }
 
+/* `[hidden]` HTML attribute must always win — without :not([hidden]) the
+   `display: flex` rule below overrides the user-agent `[hidden] { display: none }`,
+   which leaves an empty grid item that consumes the .app's `1fr` row track and
+   pushes the workspace below the visible viewport. */
+.time-custom-row[hidden] { display: none !important; }
 .time-custom-row {
   display: flex;
   align-items: center;

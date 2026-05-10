@@ -1269,10 +1269,22 @@
           `<span class="tool-tag"><span class="swatch"></span>${escapeHtml(TOOL_LABELS[tool] || tool)}</span>` +
           `<span class="count">${items.length}</span>` +
           `<span class="summary">last <strong>${escapeHtml(shortTime(lastTs))}</strong></span>`;
-        head.addEventListener('click', () => {
-          if (expandedChildGroups.has(groupKey)) expandedChildGroups.delete(groupKey);
-          else expandedChildGroups.add(groupKey);
-          render();
+        // Collapse / expand the child-group locally — DO NOT call render().
+        // A full re-render rebuilds every <details> from scratch and loses
+        // the parent turn-card's open state. CSS reacts to aria-expanded so
+        // a local toggle is sufficient. stopPropagation prevents the click
+        // bubbling up to the parent <details>.
+        head.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const wasExpanded = group.getAttribute('aria-expanded') === 'true';
+          if (wasExpanded) {
+            group.setAttribute('aria-expanded', 'false');
+            expandedChildGroups.delete(groupKey);
+          } else {
+            group.setAttribute('aria-expanded', 'true');
+            expandedChildGroups.add(groupKey);
+          }
         });
         group.appendChild(head);
 
@@ -1291,11 +1303,23 @@
           more.type = 'button';
           more.className = 'more-link';
           more.textContent = `show all ${items.length} ${TOOL_LABELS[tool] || tool} →`;
+          // Show-all also stays local — replace just this body's rows in-place.
           more.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             expandedShowAll.add(groupKey);
             expandedChildGroups.add(groupKey);
-            render();
+            const newBody = el('div','child-group-body');
+            items.forEach(c => {
+              const row = el('div','child-row');
+              const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
+              const tg  = el('span','target'); tg.textContent  = childTargetText(c);
+              const me  = el('span','meta');   me.textContent  = c.agent || '';
+              if (c.status === 'failed') me.classList.add('fail');
+              row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
+              newBody.appendChild(row);
+            });
+            groupBody.replaceWith(newBody);
           });
           groupBody.appendChild(more);
         }
