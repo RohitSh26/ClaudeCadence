@@ -12,10 +12,11 @@ You open the viewer in a browser tab, work normally, watch it fill itself.
 ```
 $ /plugin marketplace add RohitSh26/ClaudeCadence
 $ /plugin install claudecadence@claudecadence
-$ /claudecadence:home   # cross-project home, opens http://localhost:4173/
 ```
 
-That's it. Now go work in Claude Code. The timeline grows in the background.
+That's it. **The viewer auto-starts on the next SessionStart** — no slash command needed. Open `http://localhost:4173/` (or whichever port the plugin printed in the "Session started" node). Now go work in Claude Code. The timeline grows in the background and the browser tab auto-refreshes every 5 seconds.
+
+Want it off? Set `CLAUDECADENCE_NO_AUTO_SERVE=1` in your shell. Then start it manually with `/claudecadence:serve` or `cadence-start` from any terminal.
 
 ---
 

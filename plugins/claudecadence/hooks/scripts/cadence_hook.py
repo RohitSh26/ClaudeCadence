@@ -266,14 +266,81 @@ def append_node(node: dict) -> None:
 # ─────────────────────────── Event handlers ───────────────────────────────
 
 
+def maybe_auto_serve() -> int | None:
+    """Auto-start the project viewer if no server is running.
+
+    Default ON. Opt out by setting CLAUDECADENCE_NO_AUTO_SERVE=1 in the env.
+    Idempotent: if a live PID is in .server.pid, do nothing.
+
+    Returns the chosen port (read back from .server.port after the server
+    writes it) or None if we didn't start one.
+    """
+    if os.environ.get("CLAUDECADENCE_NO_AUTO_SERVE"):
+        return None
+    pidfile = CADENCE_DIR / ".server.pid"
+    portfile = CADENCE_DIR / ".server.port"
+    # Already running? Don't double-start.
+    if pidfile.exists():
+        try:
+            pid = int(pidfile.read_text().strip())
+            os.kill(pid, 0)
+            try:
+                return int(portfile.read_text().strip())
+            except (OSError, ValueError):
+                return None
+        except (ValueError, OSError, ProcessLookupError):
+            # Stale pid — fall through and start fresh.
+            try:
+                pidfile.unlink()
+            except OSError:
+                pass
+
+    serve_bin = PLUGIN_ROOT / "bin" / "cadence-serve"
+    if not serve_bin.exists():
+        return None
+
+    log_path = CADENCE_DIR / ".server.log"
+    CADENCE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        import subprocess  # local import keeps cold-start fast for non-SessionStart events
+        log = open(log_path, "w")
+        # start_new_session=True detaches from any controlling tty + parent process group,
+        # so the server survives even when the hook process exits.
+        proc = subprocess.Popen(
+            ["python3", str(serve_bin), str(PROJECT_DIR), "--no-open"],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+        pidfile.write_text(str(proc.pid))
+    except Exception as exc:  # noqa: BLE001 — fail-soft per design
+        print(f"[claudecadence] auto-serve failed: {exc}", file=sys.stderr)
+        return None
+
+    # Best-effort wait for the port file (server writes it on bind).
+    for _ in range(20):
+        if portfile.exists():
+            try:
+                return int(portfile.read_text().strip())
+            except (OSError, ValueError):
+                return None
+        time.sleep(0.1)
+    return None
+
+
 def handle_session_start(payload: dict) -> dict | None:
     bootstrap_project()
+    port = maybe_auto_serve()
+    summary = f"Working in {PROJECT_DIR.name}"
+    if port:
+        summary += f" — viewer at http://localhost:{port}/"
     return {
         "agent": "external",
         "kind": "ci",
         "status": "completed",
         "title": "Session started",
-        "summary": f"Working in {PROJECT_DIR.name}",
+        "summary": summary,
         "tags": ["session", "start"],
         "session": payload.get("session_id", "main")[:12],
     }
