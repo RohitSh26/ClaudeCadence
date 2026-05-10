@@ -100,6 +100,9 @@ a:hover { text-decoration: underline; }
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto auto auto 1fr;
+  grid-template-columns: 1fr;   /* without this, grid items are content-sized
+                                   and shorter children look "centered" */
+  width: 100%;
 }
 
 /* failure banner — iteration 2 addition. sticky, top-of-page */
@@ -2448,11 +2451,23 @@ mark {
   align-items: start;
 }
 .viewer-shell.is-multi {
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 200px 1fr;
 }
 .viewer-shell.is-multi .session-pane {
   min-width: 0;
 }
+/* Narrower turn rail for the multi-session detail pane — reclaims ~24px of
+   card width on every card. Single-session view keeps the wider rail. */
+.viewer-shell.is-multi .session-pane .turn {
+  grid-template-columns: 32px 1fr;
+  column-gap: 12px;
+}
+.viewer-shell.is-multi .session-pane .rail .marker {
+  left: 8px;
+  width: 14px;
+  height: 14px;
+}
+.viewer-shell.is-multi .session-pane .rail::before { left: 15px; }
 
 /* Sidebar — only rendered when is-multi */
 .session-sidebar {
@@ -2908,3 +2923,17 @@ mark {
   min-width: 0;
 }
 .session-pane > ol.timeline { width: 100%; max-width: none; }
+
+/* ──────────────────────────────────────────────────────────────────────
+   FINAL — width invariants. Consolidated so cascade order is unambiguous.
+   These are intentionally heavy-handed (!important) so future drift can't
+   silently re-center the workspace.
+   ────────────────────────────────────────────────────────────────── */
+html, body, .app          { width: 100% !important; max-width: 100% !important; }
+.app                       { display: grid !important; grid-template-columns: 1fr !important; }
+.workspace                 { width: 100% !important; max-width: 100% !important; margin: 0 !important; }
+.workspace > ol.timeline   { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
+.viewer-shell              { width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+.viewer-shell.is-multi     { width: 100% !important; max-width: 100% !important; display: grid !important; grid-template-columns: 200px 1fr !important; column-gap: 24px !important; }
+.viewer-shell.is-multi .session-pane { min-width: 0 !important; width: 100% !important; }
+.session-pane > ol.timeline { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }

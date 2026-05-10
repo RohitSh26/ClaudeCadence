@@ -1463,6 +1463,29 @@
   }
 
   // ─────────── Boot ───────────
+  // Set the page title to the project name (like Claude Code's terminal does).
+  // Two paths: /c/<slug>/ (served via hub) → use slug; otherwise fetch from
+  // /api/project-name on the per-project server.
+  function setProjectTitle(name) {
+    const h1 = document.getElementById('project-title');
+    if (!h1 || !name) return;
+    h1.innerHTML = escapeHtml(name) + '<span class="qualifier"> — live timeline</span>';
+    document.title = name + ' · ClaudeCadence';
+  }
+  function wireProjectTitle() {
+    const m = location.pathname.match(/^\/c\/([^/]+)/);
+    if (m) {
+      let slug;
+      try { slug = decodeURIComponent(m[1]); } catch (_) { slug = m[1]; }
+      setProjectTitle(slug);
+      return;
+    }
+    fetch('api/project-name', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && j.name) setProjectTitle(j.name); })
+      .catch(() => {});
+  }
+
   // Resolve the hub URL — three cases:
   //   1. We're served under /c/<slug>/ (via hub) → link to "/"
   //   2. We're served per-project, hub is running → fetch /api/hub-url, link to it
@@ -1490,6 +1513,7 @@
     readHash();
     window.addEventListener('hashchange', () => { readHash(); render(); });
     wireHomeLink();
+    wireProjectTitle();
     render();
     // Seed polling baseline so we don't immediately rerender on first tick.
     fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })

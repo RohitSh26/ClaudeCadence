@@ -598,9 +598,35 @@ function lastAssistantText(transcriptPath) {
   return null;
 }
 
+// v1.8.2: data-driven, FIFO turn matching for Stop.
+// The single .current_turn.txt file is racy when UserPromptSubmit for the
+// next turn lands before Stop for the previous one (responses end up paired
+// with the wrong prompt — observed off-by-one in real sessions).
+//
+// Stops fire in COMPLETION order. So we want the OLDEST prompt in this
+// session that hasn't got a matching response yet — that's the one Stop
+// is closing. Walk forward, push opens, pop on response, return head.
+function pendingPromptTurnId(session) {
+  const nodes = loadNodes();
+  const openPrompts = [];
+  for (const n of nodes) {
+    if ((n.session || 'main') !== session) continue;
+    const tags = n.tags || [];
+    const tid  = n.turn_id;
+    if (!tid) continue;
+    if (tags.indexOf('prompt') !== -1) {
+      openPrompts.push(tid);
+    } else if (tags.indexOf('response') !== -1) {
+      const idx = openPrompts.indexOf(tid);
+      if (idx !== -1) openPrompts.splice(idx, 1);
+    }
+  }
+  return openPrompts.length ? openPrompts[0] : null;
+}
+
 function handleStop(payload) {
   const session = sessionIdOf(payload);
-  const tid = currentTurnId();
+  const tid = pendingPromptTurnId(session) || currentTurnId();
   const text = lastAssistantText(payload.transcript_path);
   let node;
   if (text) {

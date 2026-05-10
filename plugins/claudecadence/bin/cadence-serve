@@ -263,6 +263,19 @@ function makeProjectHandler(cadenceDir) {
     const u = url.parse(req.url);
     const clean = decodeURIComponent(u.pathname || '/');
 
+    // /api/project-name — returns the project directory name so the viewer
+    // can title its header with the package, the way Claude Code does.
+    if (clean === '/api/project-name') {
+      const projectDir = path.dirname(path.dirname(cadenceDir));
+      const body = Buffer.from(JSON.stringify({ name: path.basename(projectDir), path: projectDir }), 'utf8');
+      res.writeHead(200, Object.assign({
+        'Content-Type': 'application/json',
+        'Content-Length': body.length,
+      }, noCacheHeaders()));
+      res.end(body);
+      return;
+    }
+
     // /api/hub-url — returns the running hub URL (or null) so the per-project
     // viewer can show a "all cadences" link when the user has the hub up.
     if (clean === '/api/hub-url') {
