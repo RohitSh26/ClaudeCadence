@@ -370,7 +370,7 @@ function handleUserPrompt(payload) {
   const title = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : titleLine;
   let summary = prompt.slice(0, 160).replace(/\n/g, ' ').trim();
   if (prompt.length > 160) summary += '…';
-  const blocks = [{ type: 'markdown', value: prompt.slice(0, 8000) }];
+  const blocks = [{ type: 'markdown', value: prompt.slice(0, 200000) }];
   return {
     agent: 'founder',
     kind: isSlash ? 'decision' : 'response',
@@ -593,7 +593,7 @@ function handleStop(payload) {
       summary,
       tags: ['response'],
       session,
-      blocks: [{ type: 'markdown', value: text.slice(0, 8000) }],
+      blocks: [{ type: 'markdown', value: text.slice(0, 200000) }],
     };
   } else {
     node = {

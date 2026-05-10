@@ -80,24 +80,99 @@
     if (h < 24) return `${h}h`;
     return `${Math.floor(h / 24)}d`;
   }
-  function simpleMd(s) {
-    let h = escapeHtml(s);
-    h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-    h = h.replace(/\*(.+?)\*/g,'<em>$1</em>');
-    h = h.replace(/`([^`]+)`/g,'<code>$1</code>');
-    h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
-    const lines = h.split('\n');
-    let out = []; let inUl = false;
-    for (const ln of lines) {
-      if (/^- /.test(ln)) {
-        if (!inUl) { out.push('<ul>'); inUl = true; }
-        out.push('<li>' + ln.replace(/^- /, '') + '</li>');
-      } else {
-        if (inUl) { out.push('</ul>'); inUl = false; }
-        if (ln.trim()) out.push('<p>' + ln + '</p>');
+  // Block-aware markdown renderer. Handles ATX headings, fenced code,
+  // blockquotes (recursive), ordered + unordered lists, horizontal rules,
+  // and paragraphs. Inline: **bold**, *italic*, `code`, [text](url).
+  // Deliberately small — no tables (use the `table` block) and no images.
+  function safeHref(raw) {
+    const trimmed = String(raw).trim();
+    // Block javascript:, data:, vbscript: schemes — anything else is allowed.
+    if (/^(javascript|data|vbscript):/i.test(trimmed)) return '#';
+    return trimmed;
+  }
+  function inlineMd(s) {
+    s = escapeHtml(s);
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+      (_m, label, href) => `<a href="${escapeHtml(safeHref(href))}" target="_blank" rel="noopener">${label}</a>`);
+    return s;
+  }
+  function simpleMd(src) {
+    const lines = String(src || '').split('\n');
+    const out = [];
+    const blockStart = /^(```|#{1,6}\s|>|[-*+]\s|\d+\.\s|---\s*$|\*\*\*\s*$|___\s*$)/;
+    let i = 0;
+    while (i < lines.length) {
+      const ln = lines[i];
+
+      if (/^```/.test(ln)) {
+        const lang = ln.replace(/^```/, '').trim();
+        const buf = [];
+        i += 1;
+        while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i += 1; }
+        i += 1;
+        out.push(
+          '<pre' + (lang ? ` data-lang="${escapeHtml(lang)}"` : '') + '><code>' +
+          escapeHtml(buf.join('\n')) +
+          '</code></pre>'
+        );
+        continue;
       }
+
+      if (/^(---|\*\*\*|___)\s*$/.test(ln)) {
+        out.push('<hr>');
+        i += 1;
+        continue;
+      }
+
+      const h = ln.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+      if (h) {
+        out.push(`<h${h[1].length}>${inlineMd(h[2])}</h${h[1].length}>`);
+        i += 1;
+        continue;
+      }
+
+      if (/^>/.test(ln)) {
+        const bq = [];
+        while (i < lines.length && /^>/.test(lines[i])) {
+          bq.push(lines[i].replace(/^>\s?/, ''));
+          i += 1;
+        }
+        out.push('<blockquote>' + simpleMd(bq.join('\n')) + '</blockquote>');
+        continue;
+      }
+
+      if (/^[-*+]\s+/.test(ln)) {
+        const items = [];
+        while (i < lines.length && /^[-*+]\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^[-*+]\s+/, ''));
+          i += 1;
+        }
+        out.push('<ul>' + items.map(it => `<li>${inlineMd(it)}</li>`).join('') + '</ul>');
+        continue;
+      }
+
+      if (/^\d+\.\s+/.test(ln)) {
+        const items = [];
+        while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\d+\.\s+/, ''));
+          i += 1;
+        }
+        out.push('<ol>' + items.map(it => `<li>${inlineMd(it)}</li>`).join('') + '</ol>');
+        continue;
+      }
+
+      if (!ln.trim()) { i += 1; continue; }
+
+      const para = [];
+      while (i < lines.length && lines[i].trim() && !blockStart.test(lines[i])) {
+        para.push(lines[i]);
+        i += 1;
+      }
+      if (para.length) out.push('<p>' + para.map(inlineMd).join('<br>') + '</p>');
     }
-    if (inUl) out.push('</ul>');
     return out.join('\n');
   }
   function fmtElapsed(ms) {
