@@ -2939,120 +2939,10 @@ html, body, .app          { width: 100% !important; max-width: 100% !important; 
 .session-pane > ol.timeline { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
 
 /* ──────────────────────────────────────────────────────────────────────
-   v1.9 — Dark mode (Claude Design iter4)
-   Token overrides + animation re-tunes. Activated via <html data-theme="dark">.
+   Theme toggle button — structural styles (sun/moon swap, base look).
+   Theme-specific colour treatments are below in the [data-theme="dark"]
+   block from Claude Design iter5.
    ────────────────────────────────────────────────────────────────── */
-
-[data-theme="dark"] {
-  /* Neutrals — warm slate with brown undertone, not blue */
-  --ink:         #ede6d6;
-  --graphite:    #c4bca8;
-  --paper:       #15140f;
-  --bone:        #1f1d17;
-  --soft:        #2a2720;
-  --mid:         #8c8678;
-  --neutral-300: #322f27;
-  --neutral-400: #5a564b;
-  --neutral-700: #c4bca8;
-
-  /* Apricot — pulled back ~12% chroma + 8% lighter so it glows
-     instead of screaming. -600 INVERTS role: text on dark surfaces. */
-  --apricot-100: #2c1d12;
-  --apricot-500: #f5a467;
-  --apricot-600: #f8c193;
-  --apricot-700: #fcd9b8;
-  --apricot-glow: rgba(245, 164, 103, 0.32);
-
-  /* States — luminance lifted ~25 pts so they read on dark. */
-  --success:    #6dbb8a;
-  --warning:    #d4a849;
-  --danger:     #e57878;
-  --info:       #84afd6;
-  --success-bg: #182520;
-  --warning-bg: #2a2317;
-  --danger-bg:  #2a1a1a;
-  --info-bg:    #18222a;
-
-  /* Tool tints follow state palette */
-  --tool-read:  #84afd6;
-  --tool-edit:  #f5a467;
-  --tool-bash:  #8c8678;
-  --tool-web:   #6dbb8a;
-  --tool-think: #c4bca8;
-  --tool-fail:  #e57878;
-
-  --status-active:   #6dbb8a;
-  --status-stale:    #d4a849;
-  --status-inactive: #5a564b;
-
-  --lane-trunk:    #8c8678;
-  --lane-apricot:  #f5a467;
-  --lane-info:     #84afd6;
-  --lane-success:  #6dbb8a;
-  --lane-warning:  #d4a849;
-  --lane-graphite: #c4bca8;
-
-  /* Shadows invert role — they become voids beneath cards.
-     Combine with a 1px highlight on top to fake elevation. */
-  --shadow-1: 0 1px 0 rgba(255,240,210,0.03) inset,
-              0 1px 2px rgba(0,0,0,0.5);
-  --shadow-2: 0 1px 0 rgba(255,240,210,0.04) inset,
-              0 2px 8px rgba(0,0,0,0.55),
-              0 16px 32px -16px rgba(0,0,0,0.7);
-}
-
-/* Animation re-tunes — light-mode glows die on dark, lift opacity. */
-[data-theme="dark"] .live-meter .pulse {
-  box-shadow: 0 0 0 4px rgba(109, 187, 138, 0.22);
-}
-[data-theme="dark"] .live-meter::before {
-  background: radial-gradient(120% 200% at 0% 50%,
-    rgba(245, 164, 103, 0.22) 0%, transparent 55%);
-  opacity: 1;
-}
-[data-theme="dark"] .card.is-active {
-  border-color: rgba(245, 164, 103, 0.35);
-}
-[data-theme="dark"] .card.is-active::before {
-  background:
-    radial-gradient(80% 200% at 0% 50%, rgba(245,164,103,0.18) 0%, transparent 55%),
-    radial-gradient(120% 200% at 100% 50%, rgba(245,164,103,0.10) 0%, transparent 60%);
-  opacity: 1;
-}
-[data-theme="dark"] .session-row[data-status="active"] .lane-stripe {
-  background: var(--success);
-  box-shadow: 0 0 0 2px rgba(109, 187, 138, 0.22),
-              0 0 14px -2px rgba(109, 187, 138, 0.4);
-}
-[data-theme="dark"] .session-row.is-selected,
-[data-theme="dark"] .session-row.compact.is-selected {
-  background: linear-gradient(90deg,
-    rgba(245,164,103,0.14) 0%,
-    rgba(245,164,103,0.04) 100%);
-  border-left-color: var(--apricot-500);
-}
-
-/* Markdown — link / blockquote / code re-tints */
-[data-theme="dark"] .block.md a          { color: var(--apricot-700); }
-[data-theme="dark"] .block.md blockquote { background: var(--bone); border-left-color: var(--apricot-500); }
-[data-theme="dark"] .block.md code       { background: var(--bone); border-color: var(--soft); color: var(--apricot-600); }
-[data-theme="dark"] .block.md pre        { background: #0c0b08; border-color: var(--soft); }
-[data-theme="dark"] .block.code          { background: #0c0b08; outline: 1px solid var(--soft); outline-offset: -1px; }
-
-/* Status pill borders — slightly lifted alpha so they read */
-[data-theme="dark"] .status.in-progress { border-color: rgba(132,175,214,0.32); }
-[data-theme="dark"] .status.completed   { border-color: rgba(109,187,138,0.32); }
-[data-theme="dark"] .status.failed      { border-color: rgba(229,120,120,0.32); }
-[data-theme="dark"] .status.blocked     { border-color: rgba(212,168,73,0.32); }
-[data-theme="dark"] .status.decision    { border-color: rgba(245,164,103,0.4); }
-
-/* CC brand glyph — flips to apricot on dark for one warm anchor point */
-[data-theme="dark"] .app-header .brand .glyph {
-  background: var(--apricot-500);
-  color: var(--paper);
-}
-
-/* ── Toggle button (sits in .app-header .session-meta, before .live-meter) ── */
 .theme-toggle-btn {
   width: 28px; height: 28px;
   border-radius: 50%;
@@ -3062,17 +2952,199 @@ html, body, .app          { width: 100% !important; max-width: 100% !important; 
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: color .14s var(--ease-out, ease-out), border-color .14s var(--ease-out, ease-out);
+  transition: color .14s ease-out, border-color .14s ease-out, box-shadow .14s ease-out;
   margin-right: 10px;
+  padding: 0;
 }
 .theme-toggle-btn:hover { color: var(--ink); border-color: var(--neutral-400); }
 .theme-toggle-btn svg { width: 14px; height: 14px; }
-[data-theme="dark"] .theme-toggle-btn { color: var(--apricot-500); }
 .theme-toggle-btn .moon { display: none; }
 [data-theme="dark"] .theme-toggle-btn .sun  { display: none; }
 [data-theme="dark"] .theme-toggle-btn .moon { display: block; }
 
-/* Smooth theme swap on the body element to avoid jarring flash */
-html, body {
-  transition: background .25s ease-out, color .25s ease-out;
+/* Smooth theme swap on the body to avoid jarring flash */
+html, body { transition: background .25s ease-out, color .25s ease-out; }
+
+/* ── ⚡ futuristic dark theme — deep-space cockpit ────────────────────
+   Claude Design iter5.
+   All overrides scoped to [data-theme="dark"]. Light mode at :root
+   is untouched. Token names match v1.8 — only values are remapped.
+   ────────────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] {
+  /* 1. Surface + ink */
+  --paper:        #06080d;
+  --bone:         #0c1018;
+  --soft:         #182238;
+  --ink:          #e6ecf7;
+  --mid:          #7d8aa6;
+  --neutral-300:  #243049;
+  --neutral-400:  #4a5775;
+  --neutral-700:  #aab8d1;
+  --graphite:     #aab8d1;
+
+  /* 2. Accent — replaces apricot on dark with electric cyan */
+  --apricot-100:  #062a33;
+  --apricot-500:  #22d3ee;
+  --apricot-600:  #67e8f9;
+  --apricot-700:  #a5f3fc;
+  --apricot-glow: rgba(34, 211, 238, 0.42);
+
+  /* 3. States, tools, lanes */
+  --success: #34d399;  --warning: #fbbf24;
+  --danger:  #f87171;  --info:    #818cf8;
+  --success-bg: #0e2a22;  --warning-bg: #2a200d;
+  --danger-bg:  #2a1414;  --info-bg:    #171a30;
+
+  --tool-read:  #818cf8;  --tool-edit:  #22d3ee;
+  --tool-bash:  #7d8aa6;  --tool-web:   #34d399;
+  --tool-think: #aab8d1;  --tool-fail:  #f87171;
+
+  --status-active:   #34d399;
+  --status-stale:    #fbbf24;
+  --status-inactive: #4a5775;
+
+  --lane-trunk:    #7d8aa6;  --lane-apricot:  #22d3ee;
+  --lane-info:     #818cf8;  --lane-success:  #34d399;
+  --lane-warning:  #fbbf24;  --lane-graphite: #aab8d1;
+
+  /* 4. Shadows — inset glass highlight + void drop */
+  --shadow-1: 0 1px 0 rgba(255,255,255,0.04) inset,
+              0 1px 2px rgba(0,0,0,0.6);
+  --shadow-2: 0 1px 0 rgba(255,255,255,0.05) inset,
+              0 2px 10px rgba(0,0,0,0.65),
+              0 18px 40px -18px rgba(0,0,0,0.85);
+}
+
+/* ── 5. Component re-tunes — every leaky surface ──────────── */
+
+[data-theme="dark"] .app-header,
+[data-theme="dark"] .stats-ribbon { background: var(--paper); border-bottom: 1px solid var(--soft); }
+[data-theme="dark"] .app-header .brand .glyph {
+  background: var(--apricot-500); color: var(--paper);
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.35),
+              0 0 14px rgba(34,211,238,0.45);
+}
+
+[data-theme="dark"] .filter-strip { background: var(--paper); }
+[data-theme="dark"] .chip { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .chip.is-active {
+  background: rgba(34,211,238,0.10);
+  border-color: rgba(34,211,238,0.55);
+  color: var(--apricot-700);
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.18),
+              0 0 12px -2px rgba(34,211,238,0.35);
+}
+[data-theme="dark"] .seg { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .seg button.is-active {
+  background: rgba(34,211,238,0.12);
+  color: var(--apricot-700);
+  text-shadow: 0 0 8px rgba(34,211,238,0.4);
+}
+[data-theme="dark"] .search { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .search:focus-within {
+  border-color: var(--apricot-500);
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.30),
+              0 0 22px -4px rgba(34,211,238,0.45);
+}
+[data-theme="dark"] .time-custom-row { background: var(--bone); border-color: var(--soft); }
+
+[data-theme="dark"] .live-meter { background: var(--bone); border: 1px solid var(--soft); }
+[data-theme="dark"] .live-meter .pulse {
+  box-shadow: 0 0 0 4px rgba(52,211,153,0.22),
+              0 0 14px rgba(52,211,153,0.55);
+}
+[data-theme="dark"] .live-meter::before {
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.22) 50%, transparent);
+  animation: scanline-pass 5s linear infinite;
+}
+@keyframes scanline-pass {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(110%); }
+}
+
+[data-theme="dark"] .card,
+[data-theme="dark"] .turn-card { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .card.is-active,
+[data-theme="dark"] .turn-card.is-active {
+  border-color: rgba(34,211,238,0.42);
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.18),
+              0 0 28px -8px rgba(34,211,238,0.40),
+              var(--shadow-2);
+}
+[data-theme="dark"] .card.is-active::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--apricot-500) 50%, transparent);
+  animation: edge-shimmer 3.6s ease-in-out infinite;
+}
+@keyframes edge-shimmer {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1.0; }
+}
+
+[data-theme="dark"] .session-row[data-status="active"] .lane-stripe {
+  background: var(--success);
+  box-shadow: 0 0 0 1px rgba(52,211,153,0.35),
+              0 0 12px rgba(52,211,153,0.55);
+}
+[data-theme="dark"] .session-row.is-selected,
+[data-theme="dark"] .session-row.compact.is-selected {
+  background: linear-gradient(90deg, rgba(34,211,238,0.10), transparent);
+  border-left: 2px solid var(--apricot-500);
+}
+
+[data-theme="dark"] .child-group { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .child-group-body { background: var(--paper); }
+
+[data-theme="dark"] .block.md a { color: var(--apricot-600); }
+[data-theme="dark"] .block.md blockquote {
+  border-left-color: var(--apricot-500);
+  background: var(--apricot-100);
+}
+[data-theme="dark"] .block.md code {
+  background: var(--apricot-100);
+  color: var(--apricot-700);
+  border: 1px solid rgba(34,211,238,0.18);
+}
+[data-theme="dark"] .block.code pre,
+[data-theme="dark"] .block.md pre { background: #03050a; border: 1px solid var(--soft); }
+
+[data-theme="dark"] .status.completed { color: var(--success); }
+[data-theme="dark"] .status.in-progress { color: var(--apricot-500); }
+[data-theme="dark"] .status.failed { color: var(--danger); }
+
+[data-theme="dark"] .failure-banner {
+  background: var(--danger-bg);
+  border-bottom: 1px solid rgba(248,113,113,0.35);
+  color: var(--danger);
+}
+
+[data-theme="dark"] .cadence { background: var(--bone); border-color: var(--soft); }
+[data-theme="dark"] .cadence[data-status="active"] {
+  background: linear-gradient(90deg, rgba(52,211,153,0.07), var(--bone) 35%);
+  border-color: rgba(52,211,153,0.35);
+}
+[data-theme="dark"] .cadence[data-status="active"] .lane {
+  background: var(--success);
+  box-shadow: 0 0 0 1px rgba(52,211,153,0.3),
+              0 0 12px rgba(52,211,153,0.5);
+}
+[data-theme="dark"] .live-pill { background: rgba(52,211,153,0.10); border: 1px solid rgba(52,211,153,0.30); }
+
+[data-theme="dark"] .theme-toggle-btn {
+  background: var(--bone);
+  border-color: var(--soft);
+  color: var(--apricot-600);
+}
+[data-theme="dark"] .theme-toggle-btn:hover {
+  border-color: var(--apricot-500);
+  color: var(--apricot-700);
+  box-shadow: 0 0 14px -4px rgba(34,211,238,0.45);
+}
+
+[data-theme="dark"] .session-sidebar.v3-grouped .group-head[data-status="active"] .swatch {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(52,211,153,0.20),
+              0 0 10px rgba(52,211,153,0.5);
 }
