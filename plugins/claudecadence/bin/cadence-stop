@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ClaudeCadence — stop any running ClaudeCadence server (project + hub).
+# Idempotent: safe to call when nothing is running.
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+HUB_DIR="${CLAUDECADENCE_HUB_DIR:-$HOME/.claude/cadence}"
+
+KILLED=0
+for SCOPE in "project:$PROJECT_DIR/.claude/cadence" "hub:$HUB_DIR"; do
+  TAG="${SCOPE%%:*}"
+  DIR="${SCOPE#*:}"
+  PIDFILE="$DIR/.server.pid"
+  PORTFILE="$DIR/.server.port"
+  if [[ -f "$PIDFILE" ]]; then
+    PID="$(cat "$PIDFILE")"
+    PORT="$(cat "$PORTFILE" 2>/dev/null || echo "?")"
+    if kill "$PID" 2>/dev/null; then
+      echo "stopped ${TAG} server (pid $PID, was on port $PORT)"
+      KILLED=1
+    fi
+    rm -f "$PIDFILE" "$PORTFILE"
+  fi
+done
+
+[[ "$KILLED" == "0" ]] && echo "Nothing running."
+exit 0

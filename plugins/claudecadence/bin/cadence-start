@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# ClaudeCadence — start the project viewer in the background and return
+# immediately. Designed to be invoked from a slash command as a single
+# line so Claude doesn't second-guess.
+#
+# Usage:  cadence-start [PROJECT_DIR] [--hub]
+#
+# Behavior:
+# - Detaches with setsid (Linux) or nohup (macOS); survives the parent shell.
+# - Idempotent: if a server is already running for this scope, prints the
+#   existing URL instead of starting a second one.
+# - On failure: tails the .server.log inline so the user sees why.
+# - Picks the first free port in 4173..4181 (cadence-serve handles that).
+
+set -euo pipefail
+
+PROJECT_DIR="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+MODE="project"
+if [[ "${1:-}" == "--hub" ]]; then
+  MODE="hub"
+elif [[ "${2:-}" == "--hub" ]]; then
+  MODE="hub"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
+
+if [[ "$MODE" == "hub" ]]; then
+  TARGET_DIR="${CLAUDECADENCE_HUB_DIR:-$HOME/.claude/cadence}"
+  SERVE_ARGS=(--hub --no-open)
+  LABEL="hub"
+else
+  TARGET_DIR="$PROJECT_DIR/.claude/cadence"
+  SERVE_ARGS=("$PROJECT_DIR" --no-open)
+  LABEL="project"
+fi
+
+mkdir -p "$TARGET_DIR"
+LOG="$TARGET_DIR/.server.log"
+PIDFILE="$TARGET_DIR/.server.pid"
+PORTFILE="$TARGET_DIR/.server.port"
+
+# Idempotent: live server already running for this scope?
+if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+  PORT="$(cat "$PORTFILE" 2>/dev/null || echo 4173)"
+  echo "ClaudeCadence ${LABEL} already running (pid $(cat "$PIDFILE")) on port ${PORT}."
+  echo "Open: http://localhost:${PORT}/"
+  exit 0
+fi
+
+# Pick the most reliable detach mechanism for this OS.
+if command -v setsid >/dev/null 2>&1; then
+  DETACH=(setsid)
+else
+  DETACH=(nohup)
+fi
+
+"${DETACH[@]}" python3 "$PLUGIN_ROOT/bin/cadence-serve" "${SERVE_ARGS[@]}" \
+  > "$LOG" 2>&1 &
+PID=$!
+echo "$PID" > "$PIDFILE"
+disown "$PID" 2>/dev/null || true
+
+# Wait briefly for the server to write its chosen port.
+for _ in 1 2 3 4 5 6 7 8; do
+  [[ -f "$PORTFILE" ]] && break
+  sleep 0.25
+done
+
+if [[ ! -f "$PORTFILE" ]]; then
+  echo "[claudecadence] server didn't start within 2s. Last 20 lines of log:"
+  tail -20 "$LOG" 2>/dev/null || echo "  (no log)"
+  rm -f "$PIDFILE"
+  exit 2
+fi
+
+PORT="$(cat "$PORTFILE")"
+echo "ClaudeCadence ${LABEL} started (pid ${PID}) on port ${PORT}."
+echo "Open: http://localhost:${PORT}/"
+echo "Log:  $LOG"
