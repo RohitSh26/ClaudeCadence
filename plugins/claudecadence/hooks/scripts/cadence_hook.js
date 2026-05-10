@@ -564,36 +564,87 @@ function handleSubagentStop(payload) {
   };
 }
 
-function lastAssistantText(transcriptPath) {
-  if (!transcriptPath) return null;
-  if (!fs.existsSync(transcriptPath)) return null;
-  let text;
-  try { text = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
-  const lines = text.split('\n');
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const ln = lines[i].trim();
-    if (!ln) continue;
-    let obj;
-    try { obj = JSON.parse(ln); } catch (_) { continue; }
-    const kind = obj.type || obj.role;
-    if (kind !== 'assistant') continue;
-    const msg = obj.message || obj;
-    const content = msg.content || obj.content || msg.text || obj.text;
-    if (typeof content === 'string') {
-      const t = content.trim();
-      if (t) return t;
-    } else if (Array.isArray(content)) {
-      const parts = [];
-      for (const block of content) {
-        if (!block || typeof block !== 'object') continue;
-        const btype = block.type;
-        if ((btype === 'text' || btype === undefined) && typeof block.text === 'string') {
-          parts.push(block.text);
-        }
-      }
-      const joined = parts.filter(Boolean).join('\n').trim();
-      if (joined) return joined;
+function extractAssistantText(obj) {
+  const msg = obj.message || obj;
+  const content = msg.content || obj.content || msg.text || obj.text;
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  const parts = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const btype = block.type;
+    if ((btype === 'text' || btype === undefined) && typeof block.text === 'string') {
+      parts.push(block.text);
     }
+  }
+  return parts.filter(Boolean).join('\n').trim();
+}
+
+// Return the Nth assistant *text* message in the transcript (1-indexed),
+// skipping entries that have no text content (pure tool_use, etc.).
+function nthAssistantText(transcriptPath, n) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n');
+  let count = 0;
+  for (const ln of lines) {
+    const trimmed = ln.trim();
+    if (!trimmed) continue;
+    let obj;
+    try { obj = JSON.parse(trimmed); } catch (_) { continue; }
+    if ((obj.type || obj.role) !== 'assistant') continue;
+    const text = extractAssistantText(obj);
+    if (!text) continue;
+    count += 1;
+    if (count === n) return text;
+  }
+  return null;
+}
+
+// Backward-compatible: the *latest* assistant text in the transcript.
+function lastAssistantText(transcriptPath) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    let obj;
+    try { obj = JSON.parse(trimmed); } catch (_) { continue; }
+    if ((obj.type || obj.role) !== 'assistant') continue;
+    const text = extractAssistantText(obj);
+    if (text) return text;
+  }
+  return null;
+}
+
+// Count response nodes already captured for this session — tells us which
+// transcript assistant message THIS Stop corresponds to.
+function priorResponseCount(session) {
+  const nodes = loadNodes();
+  let count = 0;
+  for (const n of nodes) {
+    if ((n.session || 'main') !== session) continue;
+    if ((n.tags || []).indexOf('response') !== -1) count += 1;
+  }
+  return count;
+}
+
+// Wait briefly for the (N)th assistant text to appear. Stop hook fires the
+// same second the transcript is being written; without polling we lose the
+// race ~half the time and capture the PREVIOUS turn's text.
+function waitForNthAssistantText(transcriptPath, n, maxWaitMs) {
+  maxWaitMs = maxWaitMs || 3000;
+  const deadline = Date.now() + maxWaitMs;
+  let text = nthAssistantText(transcriptPath, n);
+  if (text) return text;
+  while (Date.now() < deadline) {
+    const wakeAt = Date.now() + 80;
+    while (Date.now() < wakeAt) { /* spin */ }
+    text = nthAssistantText(transcriptPath, n);
+    if (text) return text;
   }
   return null;
 }
@@ -627,7 +678,14 @@ function pendingPromptTurnId(session) {
 function handleStop(payload) {
   const session = sessionIdOf(payload);
   const tid = pendingPromptTurnId(session) || currentTurnId();
-  const text = lastAssistantText(payload.transcript_path);
+  // The Stop hook fires concurrently with the transcript flush. Counting the
+  // response nodes we've already captured tells us this Stop is for the
+  // (N+1)th assistant message — wait briefly for it to land in the transcript
+  // rather than reading whatever happens to be the latest right now.
+  const targetIdx = priorResponseCount(session) + 1;
+  let text = waitForNthAssistantText(payload.transcript_path, targetIdx);
+  // Last-resort fallback if even the wait fails.
+  if (!text) text = lastAssistantText(payload.transcript_path);
   let node;
   if (text) {
     const firstLine = text.split('\n', 1)[0].trim();
