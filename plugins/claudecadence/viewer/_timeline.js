@@ -39,6 +39,7 @@
   let activeSession = 'all';      // v1.3: session filter
   let activeMode    = 'full';      // full · summary · compact · events
   let searchQuery   = '';
+  let activeSessionForView = null; // v1.5: which session is in the detail pane
 
   // ─────────── DOM helpers ───────────
   function el(tag, cls, text) {
@@ -724,44 +725,124 @@
     return true;
   }
 
-  // ─────────── Multi-session render (v1.3) ───────────
+  // ─────────── Multi-session render (v1.5: sidebar + detail pane) ───────────
+  // Multi-column doesn't scale — three sessions and the screen is unreadable.
+  // Instead: a left sidebar listing every session in this project (active /
+  // stale / inactive), a single detail pane on the right showing the
+  // selected session's full timeline. Same shape Linear, Slack, GitHub use
+  // for N parallel things. Scales to 3 or 30 the same way.
+  function classifySessionStatus(lastTs) {
+    if (!lastTs) return 'inactive';
+    const ms = Date.now() - new Date(lastTs).getTime();
+    if (isNaN(ms)) return 'inactive';
+    if (ms < 5 * 60 * 1000)        return 'active';
+    if (ms < 24 * 60 * 60 * 1000)  return 'stale';
+    return 'inactive';
+  }
+
+  function buildSessionMeta(nodes, sid) {
+    const sNodes = nodes.filter(n => (n.session || 'main') === sid);
+    const firstTs = sNodes[0]?.ts || '';
+    const lastTs  = sNodes[sNodes.length - 1]?.ts || '';
+    const turnsHere = new Set(sNodes.map(n => n.turn_id).filter(Boolean));
+    const failures = sNodes.filter(n => n.status === 'failed').length;
+    const firstPrompt = sNodes.find(n => isPromptNode(n));
+    return {
+      id: sid,
+      nodes: sNodes,
+      firstTs,
+      lastTs,
+      turns: turnsHere.size,
+      events: sNodes.length,
+      failures,
+      status: classifySessionStatus(lastTs),
+      firstPromptText: firstPrompt?.title || '',
+    };
+  }
+
   function renderMultiSession(root, nodes, sessionIds) {
-    const wrap = el('div','sessions-multicol');
-    wrap.style.setProperty('--col-count', sessionIds.length);
-    // Sort columns by earliest activity so the oldest session shows leftmost.
-    const byFirstTs = sessionIds.slice().sort((a, b) => {
-      const ta = nodes.find(n => (n.session || 'main') === a)?.ts || '';
-      const tb = nodes.find(n => (n.session || 'main') === b)?.ts || '';
-      return ta.localeCompare(tb);
+    const sessions = sessionIds.map(sid => buildSessionMeta(nodes, sid));
+    const statusOrder = { active: 0, stale: 1, inactive: 2 };
+    sessions.sort((a, b) => {
+      const so = statusOrder[a.status] - statusOrder[b.status];
+      if (so !== 0) return so;
+      return (b.lastTs || '').localeCompare(a.lastTs || '');
     });
-    byFirstTs.forEach(sid => {
-      const sNodes = nodes.filter(n => (n.session || 'main') === sid);
-      const col = el('div','session-col');
-      col.dataset.session = sid;
-      const head = el('div','session-col-head');
-      const left = el('div');
-      const h2 = el('h2'); h2.textContent = `session ${sid}`;
-      left.appendChild(h2);
-      const idEl = el('div','id'); idEl.textContent = `${sNodes.length} events`;
-      left.appendChild(idEl);
-      const stats = el('div','stats');
-      const turnsHere = new Set(sNodes.map(n => n.turn_id).filter(Boolean));
-      const failures = sNodes.filter(n => n.status === 'failed').length;
-      stats.innerHTML = `<strong>${turnsHere.size || '—'}</strong> turns · <strong>${failures}</strong> fails`;
-      head.appendChild(left);
-      head.appendChild(stats);
-      col.appendChild(head);
-      // Render turns inside the column.
+
+    if (!activeSessionForView || !sessions.find(s => s.id === activeSessionForView)) {
+      activeSessionForView = sessions[0]?.id || null;
+    }
+
+    const shell = el('div','viewer-shell is-multi');
+
+    const sidebar = el('aside','session-sidebar');
+    const head = el('div','head');
+    const lab = el('span','label'); lab.textContent = 'sessions';
+    const cnt = el('span','count'); cnt.textContent = sessions.length;
+    head.appendChild(lab); head.appendChild(cnt);
+    sidebar.appendChild(head);
+
+    const list = el('ul');
+    sessions.forEach(s => {
+      const row = el('li','session-row');
+      row.dataset.session = s.id;
+      row.dataset.status  = s.status;
+      if (s.id === activeSessionForView) row.classList.add('is-selected');
+
+      row.appendChild(el('div','lane-stripe'));
+
+      const body = el('div','body');
+      const titleLine = el('div','title-line');
+      const idEl = el('span','id'); idEl.textContent = s.id;
+      titleLine.appendChild(idEl);
+      const pill = el('span','status-pill'); pill.textContent = s.status;
+      titleLine.appendChild(pill);
+      body.appendChild(titleLine);
+
+      const meta = el('div','meta');
+      const failsHtml = s.failures
+        ? `<span style="color:var(--danger)"><strong>${s.failures}</strong> fails</span>`
+        : '';
+      meta.innerHTML =
+        `<span><strong>${s.turns || '—'}</strong> turns</span>` +
+        `<span><strong>${s.events}</strong> events</span>` +
+        `<span>${escapeHtml(rel(s.lastTs))} ago</span>` +
+        failsHtml;
+      body.appendChild(meta);
+
+      if (s.firstPromptText) {
+        const fp = el('div','first-prompt');
+        fp.textContent = s.firstPromptText;
+        body.appendChild(fp);
+      }
+      row.appendChild(body);
+
+      row.addEventListener('click', () => {
+        activeSessionForView = s.id;
+        try { history.replaceState(null, '', '#session/' + encodeURIComponent(s.id)); } catch (_) {}
+        render();
+      });
+      list.appendChild(row);
+    });
+    sidebar.appendChild(list);
+    shell.appendChild(sidebar);
+
+    const pane = el('div','session-pane');
+    const selected = sessions.find(s => s.id === activeSessionForView);
+    if (!selected) {
+      pane.appendChild(el('div','none','Select a session from the sidebar.'));
+    } else {
       const ol = document.createElement('ol');
       ol.className = 'timeline';
       ol.style.padding = '0';
       ol.style.margin = '0';
       ol.style.listStyle = 'none';
-      groupIntoTurns(sNodes).forEach(t => ol.appendChild(renderTurn(t)));
-      col.appendChild(ol);
-      wrap.appendChild(col);
-    });
-    root.appendChild(wrap);
+      groupIntoTurns(selected.nodes).forEach(t => ol.appendChild(renderTurn(t)));
+      pane.appendChild(ol);
+    }
+    shell.appendChild(pane);
+
+    root.appendChild(shell);
   }
 
   // ─────────── Turn grouping (v1.1) ───────────
@@ -1089,7 +1170,17 @@
   }
 
   // ─────────── Boot ───────────
+  function readSessionFromHash() {
+    const m = (location.hash || '').match(/^#session\/(.+)$/);
+    if (m) {
+      try { activeSessionForView = decodeURIComponent(m[1]); }
+      catch (_) { activeSessionForView = m[1]; }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    readSessionFromHash();
+    window.addEventListener('hashchange', () => { readSessionFromHash(); render(); });
     render();
     // Seed polling baseline so we don't immediately rerender on first tick.
     fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })

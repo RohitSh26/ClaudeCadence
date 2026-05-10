@@ -2371,3 +2371,157 @@ mark {
    between sessions) — drop the rail column, keep just the card. */
 .sessions-multicol .turn { grid-template-columns: 1fr; }
 .sessions-multicol .turn .rail { display: none; }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Sidebar + main-pane layout (v1.5) — the canonical "list of N things,
+   drill into one" pattern. Replaces the multi-column layout that broke
+   past 3 sessions.
+
+   Single-session projects skip the sidebar entirely — full-width
+   timeline. The JS sets `.viewer-shell.is-multi` when sessions > 1.
+   ────────────────────────────────────────────────────────────────── */
+
+.viewer-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 24px;
+  width: 100%;
+  align-items: start;
+}
+.viewer-shell.is-multi {
+  grid-template-columns: 260px 1fr;
+}
+.viewer-shell.is-multi .session-pane {
+  min-width: 0;
+}
+
+/* Sidebar — only rendered when is-multi */
+.session-sidebar {
+  position: sticky;
+  top: 110px;
+  align-self: start;
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  overflow: hidden;
+  max-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+}
+.session-sidebar .head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--soft);
+  background: var(--bone);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.session-sidebar .head .label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mid);
+}
+.session-sidebar .head .count {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--ink);
+  font-weight: 500;
+}
+.session-sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.session-row {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  column-gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--soft);
+  cursor: pointer;
+  transition: background .12s ease;
+  align-items: start;
+}
+.session-row:hover { background: var(--bone); }
+.session-row.is-selected {
+  background: var(--apricot-100);
+  border-left: 3px solid var(--apricot-600);
+  padding-left: 9px;
+}
+.session-row .lane-stripe {
+  width: 4px;
+  align-self: stretch;
+  border-radius: var(--radius-sm);
+  background: var(--neutral-300);
+  margin-top: 2px;
+}
+.session-row[data-status="active"] .lane-stripe {
+  background: var(--success);
+  box-shadow: 0 0 0 2px rgba(47,122,77,0.18);
+}
+.session-row[data-status="stale"] .lane-stripe { background: var(--warning); }
+.session-row[data-status="inactive"] .lane-stripe { background: var(--neutral-300); }
+
+.session-row .body {
+  min-width: 0;
+}
+.session-row .title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.session-row .id {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row .status-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mid);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.session-row[data-status="active"] .status-pill { color: var(--success); }
+.session-row[data-status="stale"] .status-pill { color: var(--warning); }
+.session-row .meta {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.session-row .meta strong { color: var(--ink); font-weight: 500; }
+.session-row .first-prompt {
+  margin-top: 4px;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Empty state for the main pane when no session is selected */
+.session-pane .none {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--mid);
+  font-family: var(--font-serif);
+  font-style: italic;
+}

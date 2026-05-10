@@ -156,6 +156,9 @@
     }
 
     visible.forEach(c => {
+      const card = el('div', 'cadence-row');
+      card.dataset.status = c.status;
+
       const a = document.createElement('a');
       a.className = 'cadence';
       a.href = `c/${encodeURIComponent(c.slug)}/`;
@@ -163,7 +166,16 @@
       a.appendChild(el('span', 'lane'));
 
       const info = el('div', 'info');
-      info.appendChild(el('div', 'name', c.name || c.slug));
+      const nameLine = el('div', 'name-line');
+      const nm = el('span', 'name', c.name || c.slug);
+      nameLine.appendChild(nm);
+      if (c.live) {
+        const lp = el('span', 'live-pill');
+        lp.appendChild(el('span', 'pulse'));
+        lp.appendChild(document.createTextNode(' viewer up'));
+        nameLine.appendChild(lp);
+      }
+      info.appendChild(nameLine);
       info.appendChild(el('div', 'path', c.path || ''));
       a.appendChild(info);
 
@@ -177,7 +189,25 @@
       arrow.innerHTML = '<svg viewBox="0 0 12 12" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 2 4 4-4 4"/></svg>';
       a.appendChild(arrow);
 
-      root.appendChild(a);
+      card.appendChild(a);
+
+      const forget = el('button', 'forget-btn');
+      forget.type = 'button';
+      forget.title = 'Remove from registry (does not delete files)';
+      forget.innerHTML = '<svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 3 6 6m-6 0 6-6"/></svg> forget';
+      forget.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!confirm(`Forget cadence "${c.name || c.slug}"?\nThe project's .claude/cadence/ files stay on disk; only the hub registry entry is removed.`)) return;
+        try {
+          await fetch('api/forget?slug=' + encodeURIComponent(c.slug), { method: 'POST' });
+        } catch (_) { /* ignore */ }
+        delete stats[c.slug];
+        await refresh();
+      });
+      card.appendChild(forget);
+
+      root.appendChild(card);
     });
   }
 

@@ -62,11 +62,14 @@ def find_free_port(host: str, base: int, span: int = 8) -> int | None:
 def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandler]:
     """Build a handler that maps:
        /                -> hub_root/home.html (or index.html fallback)
-       /registry.json   -> hub_root/registry.json
+       /registry.json   -> auto-pruned registry (drops dead project dirs);
+                           augments each entry with `live` (PID alive check).
+       /api/forget?slug=X (POST) -> remove a cadence from the registry.
        /c/<slug>/...    -> registry[slug].path/.claude/cadence/...
        (everything else) -> hub_root/<path>
     """
     registry_cache: dict[str, dict] = {"data": {"cadences": []}, "ts": 0.0}
+    write_lock = threading.Lock()
 
     def load_registry() -> dict:
         reg_path = hub_root / "registry.json"
@@ -76,6 +79,48 @@ def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandle
             return json.loads(reg_path.read_text())
         except json.JSONDecodeError:
             return {"cadences": []}
+
+    def save_registry(reg: dict) -> None:
+        reg_path = hub_root / "registry.json"
+        with write_lock:
+            tmp = reg_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(reg, indent=2))
+            tmp.replace(reg_path)
+
+    def pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except (OSError, ProcessLookupError):
+            return False
+        return True
+
+    def cadence_is_live(path_str: str) -> bool:
+        try:
+            pidfile = Path(path_str) / ".claude" / "cadence" / ".server.pid"
+            if not pidfile.exists():
+                return False
+            return pid_alive(int(pidfile.read_text().strip()))
+        except (OSError, ValueError):
+            return False
+
+    def prune_dead(reg: dict) -> tuple[dict, bool]:
+        """Drop cadences whose project dir or .claude/cadence dir no longer exists.
+        Returns (new_reg, was_changed)."""
+        kept = []
+        changed = False
+        for c in reg.get("cadences", []):
+            pth = c.get("path")
+            if not pth:
+                changed = True
+                continue
+            cd = Path(pth) / ".claude" / "cadence"
+            if not cd.exists():
+                changed = True
+                continue
+            kept.append(c)
+        return ({"cadences": kept}, changed)
 
     def cadence_dir_for(slug: str) -> Path | None:
         # 1s-cached read of registry to avoid hammering the disk per request.
@@ -101,6 +146,47 @@ def make_hub_handler(hub_root: Path) -> type[http.server.SimpleHTTPRequestHandle
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
             super().end_headers()
+
+        def _send_json(self, status: int, payload: dict) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            clean = unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+            if clean == "/registry.json":
+                reg = load_registry()
+                pruned, changed = prune_dead(reg)
+                if changed:
+                    save_registry(pruned)
+                    registry_cache["ts"] = 0.0  # invalidate
+                for c in pruned.get("cadences", []):
+                    c["live"] = cadence_is_live(c.get("path", ""))
+                self._send_json(200, pruned)
+                return
+            super().do_GET()
+
+        def do_POST(self):
+            clean = self.path.split("?", 1)[0]
+            if clean == "/api/forget":
+                from urllib.parse import parse_qs
+                qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+                slug = (qs.get("slug") or [""])[0]
+                if not slug:
+                    self._send_json(400, {"error": "missing slug"})
+                    return
+                reg = load_registry()
+                before = len(reg.get("cadences", []))
+                reg["cadences"] = [c for c in reg.get("cadences", []) if c.get("slug") != slug]
+                save_registry(reg)
+                registry_cache["ts"] = 0.0
+                self._send_json(200, {"removed": before - len(reg["cadences"]), "slug": slug})
+                return
+            self.send_response(404)
+            self.end_headers()
 
         def translate_path(self, path: str) -> str:
             clean = unquote(path.split("?", 1)[0].split("#", 1)[0])
