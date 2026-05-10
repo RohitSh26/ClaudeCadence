@@ -694,25 +694,87 @@ function latestAssistantTs(transcriptPath) {
   return latest;
 }
 
-// First (earliest) assistant TEXT in the transcript with ts strictly greater
-// than the supplied cursor. Returns { ts, text } or null.
+// Extract human-written text from a transcript user entry.
+// Returns null for tool results, internal injections, and empty content.
+function extractUserPromptText(obj) {
+  const msg = obj.message || obj;
+  const content = msg.content || obj.content;
+  if (typeof content === 'string') return content.trim() || null;
+  if (!Array.isArray(content)) return null;
+  // Require at least one text block; reject if any block is a tool_result.
+  const textBlocks = content.filter(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim());
+  if (!textBlocks.length) return null;
+  if (content.some(b => b && b.type === 'tool_result')) return null;
+  return textBlocks.map(b => b.text).join('\n').trim() || null;
+}
+
+// All assistant TEXT entries in the transcript after the cursor.
+//
+// Normal turn: collects all consecutive assistant entries until the next user
+// message. Returns { ts, text, interrupts: [] }.
+//
+// Mid-stream interrupt: if a user message appears between assistant entries AND
+// there are still more assistant entries after it (at Stop-fire time the full
+// merged response is already in the transcript), that user message is a
+// mid-stream interrupt — not the next-turn boundary. In that case we:
+//   - record the interrupt as { ts, text } in interrupts[]
+//   - continue collecting the remaining assistant entries
+// Returns { ts, text, interrupts: [{ts, text}, ...] }.
+// The caller (handleStop) emits synthetic prompt nodes from interrupts[].
 function firstAssistantTextAfter(transcriptPath, cursor) {
   if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
   let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
-  const lines = raw.split('\n');
-  let best = null;
-  for (const ln of lines) {
+
+  // Parse all relevant entries with ts > cursor in file order.
+  const entries = [];
+  for (const ln of raw.split('\n')) {
     const t = ln.trim(); if (!t) continue;
     let o; try { o = JSON.parse(t); } catch (_) { continue; }
-    if ((o.type || o.role) !== 'assistant') continue;
-    const text = extractAssistantText(o);
-    if (!text) continue;
+    const role = o.type || o.role;
+    if (role !== 'assistant' && role !== 'user') continue;
     const ts = o.timestamp || o.ts || (o.message && (o.message.created_at || o.message.timestamp)) || null;
     if (!ts) continue;
     if (cursor && ts <= cursor) continue;
-    if (!best || ts < best.ts) best = { ts, text };
+    entries.push({ role, ts, obj: o });
   }
-  return best;
+
+  // Find first assistant entry.
+  let startIdx = -1;
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].role === 'assistant' && extractAssistantText(entries[i].obj)) {
+      startIdx = i; break;
+    }
+  }
+  if (startIdx === -1) return null;
+
+  const parts = [];
+  const interrupts = [];
+  let lastTs = null;
+
+  for (let i = startIdx; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.role === 'user') {
+      // Look ahead: are there more assistant entries after this user entry?
+      const hasMoreAssistant = entries.slice(i + 1).some(
+        x => x.role === 'assistant' && extractAssistantText(x.obj)
+      );
+      if (hasMoreAssistant) {
+        // Mid-stream interrupt: record it, continue collecting.
+        const interruptText = extractUserPromptText(e.obj);
+        if (interruptText) interrupts.push({ ts: e.ts, text: interruptText });
+      } else {
+        break; // normal end-of-response boundary
+      }
+    } else {
+      const text = extractAssistantText(e.obj);
+      if (!text) continue;
+      parts.push(text);
+      if (!lastTs || e.ts > lastTs) lastTs = e.ts;
+    }
+  }
+
+  if (!parts.length) return null;
+  return { ts: lastTs, text: parts.join('\n'), interrupts };
 }
 
 function waitForFirstAssistantTextAfter(transcriptPath, cursor, maxWaitMs) {
@@ -768,18 +830,47 @@ function handleStop(payload) {
   const lowerBound = popped && popped.lowerBoundTs ? popped.lowerBoundTs : null;
   let effective = globalCursor || null;
   if (lowerBound && (!effective || lowerBound > effective)) effective = lowerBound;
-  // 3) Poll the transcript for the FIRST new assistant text after the cursor.
+  // 3) Poll the transcript for assistant text after the cursor.
   //    Stop fires the same second the transcript is being written; wait it out.
+  //    item.interrupts carries any mid-stream user prompts (Bug B).
   const item = waitForFirstAssistantTextAfter(payload.transcript_path, effective);
   let text = null;
+  let interrupts = [];
   if (item) {
     text = item.text;
+    interrupts = item.interrupts || [];
     writeCursor(session, item.ts);
   } else {
     // Last-resort fallback — better something than nothing for the timeline.
     text = lastAssistantText(payload.transcript_path);
   }
-  let node;
+
+  const nodes = [];
+
+  // 4) Emit synthetic prompt nodes for any mid-stream interrupt messages that
+  //    weren't captured by UserPromptSubmit (Bug B). Give each a fresh turn_id
+  //    so they appear as distinct turns in the timeline rather than orphans.
+  for (const intr of interrupts) {
+    const intrTid = beginTurn();
+    const titleLine = intr.text.split('\n', 1)[0].trim();
+    const intrTitle = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : (titleLine || 'User interrupted');
+    let intrSummary = intr.text.slice(0, 160).replace(/\n/g, ' ').trim();
+    if (intr.text.length > 160) intrSummary += '…';
+    nodes.push({
+      agent: 'founder',
+      kind: 'response',
+      status: 'completed',
+      title: intrTitle,
+      summary: intrSummary,
+      tags: ['prompt', 'synthesized'],
+      session,
+      ts: intr.ts,
+      turn_id: intrTid,
+      blocks: [{ type: 'markdown', value: intr.text.slice(0, 200000) }],
+    });
+  }
+
+  let responseNode;
   if (text) {
     const firstLine = text.split('\n', 1)[0].trim();
     const title = firstLine.length > 96
@@ -787,7 +878,7 @@ function handleStop(payload) {
       : (firstLine || 'Claude responded');
     let summary = text.slice(0, 160).replace(/\n/g, ' ').trim();
     if (text.length > 160) summary += '…';
-    node = {
+    responseNode = {
       agent: 'orchestrator',
       kind: 'response',
       status: 'completed',
@@ -798,7 +889,7 @@ function handleStop(payload) {
       blocks: [{ type: 'markdown', value: text.slice(0, 200000) }],
     };
   } else {
-    node = {
+    responseNode = {
       agent: 'orchestrator',
       kind: 'response',
       status: 'completed',
@@ -808,9 +899,11 @@ function handleStop(payload) {
       session,
     };
   }
-  if (tid) node.turn_id = tid;
+  if (tid) responseNode.turn_id = tid;
+  nodes.push(responseNode);
+
   endTurn();
-  return node;
+  return nodes;
 }
 
 const HANDLERS = {
@@ -857,14 +950,17 @@ function main() {
   const handler = HANDLERS[event];
   if (!handler) return 0;
 
-  let node;
-  try { node = handler(payload, { refreshed }); }
+  let result;
+  try { result = handler(payload, { refreshed }); }
   catch (exc) { logErr(`handler error (${event}): ${exc && exc.message || exc}`); return 0; }
 
-  if (!node) return 0;
-
-  try { appendNode(node); }
-  catch (exc) { logErr(`append error: ${exc && exc.message || exc}`); }
+  if (!result) return 0;
+  const nodeList = Array.isArray(result) ? result : [result];
+  for (const node of nodeList) {
+    if (!node) continue;
+    try { appendNode(node); }
+    catch (exc) { logErr(`append error: ${exc && exc.message || exc}`); }
+  }
 
   return 0;
 }
