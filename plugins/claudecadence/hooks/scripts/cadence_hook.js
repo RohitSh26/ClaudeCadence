@@ -459,6 +459,15 @@ function handlePostToolUse(payload) {
 
   if (tool === 'Agent' || tool === 'Task') {
     const sub = ti.subagent_type || ti.agent_type || 'subagent';
+    // Pairing key (v1.9.9): capture tool_use_id so the renderer can pair this
+    // PostToolUse merge with its originating fork.
+    const tuid = payload.tool_use_id
+              || (payload.tool_use && payload.tool_use.id)
+              || ti.tool_use_id
+              || null;
+    // Cross-handler dedup (v1.9.9): if SubagentStop already emitted a merge
+    // for this exact tool_use_id, skip — we'd be double-counting.
+    if (tuid && hasMergeForToolUseId(session, tuid)) return null;
     let resultText = '';
     if (tr && typeof tr === 'object') {
       resultText = tr.result || tr.content || '';
@@ -467,7 +476,7 @@ function handlePostToolUse(payload) {
     }
     resultText = shortStr(resultText, 600);
     const blocks = resultText ? [{ type: 'markdown', value: resultText }] : [];
-    return {
+    const node = {
       agent: String(sub),
       kind: 'merge',
       status: 'completed',
@@ -477,6 +486,8 @@ function handlePostToolUse(payload) {
       session,
       blocks,
     };
+    if (tuid) node.source_tool_use_id = tuid;
+    return node;
   }
 
   if (tool === 'Bash') {
@@ -579,7 +590,7 @@ function handleSubagentStop(payload) {
   //   1. SubagentStop payload — if Claude Code includes it directly
   //   2. Transcript scan — find the most recent Agent/Task tool_use whose id
   //      doesn't already appear on an existing merge node in this session
-  //   3. null — no paired fork found (noise stop)
+  //   3. null — no paired fork found (background-task noise stop)
   let tuid = payload.tool_use_id
           || (payload.tool_use && payload.tool_use.id)
           || null;
@@ -587,6 +598,12 @@ function handleSubagentStop(payload) {
     try { tuid = findUnpairedAgentToolUseId(payload.transcript_path, session); }
     catch (_) { /* leave tuid null */ }
   }
+  // Cross-handler dedup (v1.9.9): if PostToolUse already emitted a merge for
+  // this exact tool_use_id, skip the SubagentStop merge — we'd be double-
+  // counting. Skip only the merge node; still run the catch-up scan below so
+  // orchestrator prompts/responses keep getting recovered.
+  let skipMerge = false;
+  if (tuid && hasMergeForToolUseId(session, tuid)) skipMerge = true;
   const merge = {
     agent: String(sub),
     kind: 'merge',
@@ -602,6 +619,7 @@ function handleSubagentStop(payload) {
   let derived = [];
   try { derived = deriveCatchUpNodes(payload.transcript_path, session); }
   catch (exc) { logErr(`graph derivation failed: ${exc && exc.message || exc}`); }
+  if (skipMerge) return derived.length ? derived : null;
   return derived.length ? derived.concat([merge]) : merge;
 }
 
@@ -707,7 +725,25 @@ function writeCursor(session, ts) {
   try { fs.writeFileSync(cursorFile(session), String(ts)); } catch (_) {}
 }
 
-// ─── Fork→merge pairing (path A) ─────────────────────────────────────────
+// ─── Fork→merge pairing (path A, v1.9.8+) ────────────────────────────────
+//
+// True if any existing merge node in this session already references the
+// given tool_use_id. Used by both PostToolUse and SubagentStop to avoid
+// emitting double-merge nodes for the same Agent dispatch (v1.9.9). Whichever
+// of the two hooks fires first records the merge; the second one short-
+// circuits.
+function hasMergeForToolUseId(session, tuid) {
+  if (!tuid) return false;
+  try {
+    for (const n of loadNodes()) {
+      if ((n.session || 'main') !== session) continue;
+      if ((n.kind || '') !== 'merge') continue;
+      if (n.source_tool_use_id === tuid) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 // Walk the transcript looking for Agent/Task tool_use blocks. Return the id
 // of the most recent one whose id isn't already on an existing merge node in
 // this session — i.e. the next unpaired dispatch. Used by handleSubagentStop

@@ -9,8 +9,13 @@ PROJECT="$CLAUDE_PROJECT_DIR"
 HUB_DIR="${CLAUDECADENCE_HUB_DIR:-$HOME/.claude/cadence}"
 CD="$PROJECT/.claude/cadence"
 
+PLUGIN_JSON="$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json"
+VERSION=$([ -f "$PLUGIN_JSON" ] && grep '"version"' "$PLUGIN_JSON" | head -1 | sed 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/' || echo "unknown")
+LATEST_CACHED=$(ls ~/.claude/plugins/cache/claudecadence/claudecadence/ 2>/dev/null | sort -V | tail -1)
+
 echo "── ClaudeCadence doctor ──────────────────────────────"
 echo ""
+echo "VERSION       $VERSION$([ "$VERSION" != "$LATEST_CACHED" ] && [ -n "$LATEST_CACHED" ] && echo "  (latest cached: $LATEST_CACHED — run /plugin marketplace update claudecadence then /reload-plugins)")"
 echo "PROJECT       $PROJECT"
 echo "PLUGIN_ROOT   ${CLAUDE_PLUGIN_ROOT:-(unset — not in a Claude Code session?)}"
 echo "HUB_DIR       $HUB_DIR"
