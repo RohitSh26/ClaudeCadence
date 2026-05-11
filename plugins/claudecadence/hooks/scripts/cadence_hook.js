@@ -428,7 +428,14 @@ function handlePreToolUse(payload) {
     const desc = ti.description || '';
     const promptPreview = shortStr(ti.prompt || '', 200);
     const blocks = promptPreview ? [{ type: 'markdown', value: promptPreview }] : [];
-    return {
+    // Pairing key (path A): capture the originating tool_use_id so SubagentStop
+    // can look it up later and the renderer can group fork+merge into one
+    // dispatch unit. Try the documented field first, then fallbacks.
+    const tuid = payload.tool_use_id
+              || (payload.tool_use && payload.tool_use.id)
+              || ti.tool_use_id
+              || null;
+    const node = {
       agent: 'orchestrator',
       kind: 'fork',
       status: 'in_progress',
@@ -438,6 +445,8 @@ function handlePreToolUse(payload) {
       session: sessionIdOf(payload),
       blocks,
     };
+    if (tuid) node.source_tool_use_id = tuid;
+    return node;
   }
   return null;
 }
@@ -564,6 +573,20 @@ function handlePostToolUse(payload) {
 function handleSubagentStop(payload) {
   const session = sessionIdOf(payload);
   const sub = payload.subagent_type || payload.agent_type || payload.agent || 'subagent';
+  // Pairing key (path A): find the originating fork's tool_use_id so renderer
+  // can group fork+merge into one dispatch unit. Three sources of truth, in
+  // order of trustworthiness:
+  //   1. SubagentStop payload — if Claude Code includes it directly
+  //   2. Transcript scan — find the most recent Agent/Task tool_use whose id
+  //      doesn't already appear on an existing merge node in this session
+  //   3. null — no paired fork found (noise stop)
+  let tuid = payload.tool_use_id
+          || (payload.tool_use && payload.tool_use.id)
+          || null;
+  if (!tuid) {
+    try { tuid = findUnpairedAgentToolUseId(payload.transcript_path, session); }
+    catch (_) { /* leave tuid null */ }
+  }
   const merge = {
     agent: String(sub),
     kind: 'merge',
@@ -573,6 +596,7 @@ function handleSubagentStop(payload) {
     tags: ['subagent', 'stop', String(sub)],
     session,
   };
+  if (tuid) merge.source_tool_use_id = tuid;
   // Recover any prompts/responses that bypassed UPS/Stop in this session
   // (orchestrator pattern). Idempotent — dedup ensures no double-emission.
   let derived = [];
@@ -681,6 +705,47 @@ function readCursor(session) {
 }
 function writeCursor(session, ts) {
   try { fs.writeFileSync(cursorFile(session), String(ts)); } catch (_) {}
+}
+
+// ─── Fork→merge pairing (path A) ─────────────────────────────────────────
+// Walk the transcript looking for Agent/Task tool_use blocks. Return the id
+// of the most recent one whose id isn't already on an existing merge node in
+// this session — i.e. the next unpaired dispatch. Used by handleSubagentStop
+// when the SubagentStop payload doesn't carry the originating tool_use_id.
+function findUnpairedAgentToolUseId(transcriptPath, session) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
+
+  // Build the set of tool_use_ids already paired with a merge node.
+  const usedIds = new Set();
+  try {
+    for (const n of loadNodes()) {
+      if ((n.session || 'main') !== session) continue;
+      if ((n.kind || '') !== 'merge') continue;
+      if (n.source_tool_use_id) usedIds.add(n.source_tool_use_id);
+    }
+  } catch (_) {}
+
+  // Walk transcript in REVERSE so we find the latest unpaired dispatch first.
+  const lines = raw.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const t = lines[i].trim(); if (!t) continue;
+    let o; try { o = JSON.parse(t); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'assistant') continue;
+    const c = o.message && o.message.content;
+    if (!Array.isArray(c)) continue;
+    for (const block of c) {
+      if (!block || typeof block !== 'object') continue;
+      if (block.type !== 'tool_use') continue;
+      const name = block.name || '';
+      if (name !== 'Agent' && name !== 'Task') continue;
+      const id = block.id || '';
+      if (!id) continue;
+      if (usedIds.has(id)) continue;
+      return id;  // most recent unpaired dispatch
+    }
+  }
+  return null;
 }
 
 // ─── Graph-derived prompt+response capture ────────────────────────────────
