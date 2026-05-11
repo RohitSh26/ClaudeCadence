@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+// ClaudeCadence — prune historical noise from a project's nodes.js.
+//
+// Removes:
+//   - Prompt nodes whose title starts with a known system-injection marker
+//     (<task-notification>, <command-name>, <local-command-*>, etc.). Created
+//     by the broken v1.9.6 catch-up before its filter was complete.
+//   - Prompt or response nodes tagged 'synthesized' (the v1.9.4/v1.9.6 noise).
+//   - Within-5s exact-text duplicates of another prompt node (the UPS race).
+//
+// Default is dry-run. Pass --apply to actually rewrite nodes.js.
+// A timestamped backup is written to data/nodes.js.bak.<unix-ts> on apply.
+
+const fs = require('fs');
+const path = require('path');
+
+const args = process.argv.slice(2);
+const apply = args.includes('--apply');
+const projectDir = (args.find(a => !a.startsWith('--')) || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+const nodesPath = path.join(projectDir, '.claude', 'cadence', 'data', 'nodes.js');
+
+if (!fs.existsSync(nodesPath)) {
+  console.error('No nodes.js at', nodesPath);
+  process.exit(1);
+}
+
+const raw = fs.readFileSync(nodesPath, 'utf8');
+const m = raw.match(/window\.\w+\s*=\s*(\[[\s\S]*?\]);?\s*$/);
+if (!m) { console.error('Cannot parse nodes.js'); process.exit(1); }
+const all = JSON.parse(m[1]);
+
+const SYSTEM_INJECTION_RE = /^<+(task-notification|system-reminder|local-command-|command-name|command-message|command-args|command-stdout|command-stderr|autonomous-loop)/;
+
+function tsDiff(a, b) {
+  const da = Date.parse(a), db = Date.parse(b);
+  return Number.isNaN(da) || Number.isNaN(db) ? Infinity : Math.abs(da - db);
+}
+
+const removed = { systemInjection: 0, synthesized: 0, duplicates: 0 };
+const kept = [];
+const seenPromptText = new Map(); // text → [{ts, idx}]
+
+for (let i = 0; i < all.length; i++) {
+  const n = all[i];
+  const tags = n.tags || [];
+  const title = n.title || '';
+
+  // 1. System-injection garbage (broken catch-up filter)
+  if (SYSTEM_INJECTION_RE.test(title.trimStart())) {
+    removed.systemInjection++; continue;
+  }
+  // 2. v1.9.4/v1.9.6 synthesized noise
+  if (tags.indexOf('synthesized') !== -1) {
+    removed.synthesized++; continue;
+  }
+  // 3. Within-5s exact duplicates of an earlier prompt (UPS race)
+  if (tags.indexOf('prompt') !== -1) {
+    const k = title.slice(0, 100) + '|' + (n.summary || '').slice(0, 100);
+    const existing = seenPromptText.get(k);
+    if (existing && existing.some(prev => tsDiff(prev.ts, n.ts) < 5000)) {
+      removed.duplicates++; continue;
+    }
+    if (!existing) seenPromptText.set(k, []);
+    seenPromptText.get(k).push({ ts: n.ts, idx: i });
+  }
+  kept.push(n);
+}
+
+const totalRemoved = removed.systemInjection + removed.synthesized + removed.duplicates;
+console.log('Project:', projectDir);
+console.log('Existing nodes:', all.length);
+console.log('Would remove:');
+console.log('  system-injection garbage prompts:', removed.systemInjection);
+console.log('  v1.9.4/v1.9.6 synthesized noise:', removed.synthesized);
+console.log('  within-5s prompt duplicates:    ', removed.duplicates);
+console.log('  TOTAL:', totalRemoved);
+console.log('Would keep:', kept.length);
+
+if (!apply) {
+  console.log();
+  console.log('Dry run. Add --apply to actually rewrite nodes.js (a backup will be saved).');
+  process.exit(0);
+}
+
+if (totalRemoved === 0) {
+  console.log('Nothing to do.');
+  process.exit(0);
+}
+
+const backupPath = nodesPath + '.bak.' + Math.floor(Date.now() / 1000);
+fs.copyFileSync(nodesPath, backupPath);
+
+const header = raw.slice(0, raw.indexOf('window.'));
+const varName = (raw.match(/window\.(\w+)\s*=/) || [])[1] || 'TIMELINE_NODES';
+const out = header + 'window.' + varName + ' = ' + JSON.stringify(kept, null, 2) + ';\n';
+fs.writeFileSync(nodesPath, out);
+
+console.log();
+console.log('Pruned. Backup saved at:', backupPath);
+console.log('Refresh the viewer to see the cleaned timeline.');
