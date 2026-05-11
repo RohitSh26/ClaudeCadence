@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" font-family="-apple-system, system-ui, Segoe UI, sans-serif">
+  <!-- ClaudeCadence — iter6 design preview, synthetic data (BloomList fictional project).
+       Sage-on-charcoal dark theme. -->
+  <defs>
+    <linearGradient id="dispatchTint" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#122723" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#0e1116" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="110%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <!-- ── Canvas background (paper / charcoal) ───────────────────────── -->
+  <rect width="1200" height="780" fill="#0e1116"/>
+
+  <!-- ── Viewer chrome ──────────────────────────────────────────────── -->
+  <rect x="40" y="40" width="1120" height="700" rx="10" ry="10"
+        fill="#0e1116" stroke="#232833" stroke-width="1" filter="url(#cardShadow)"/>
+  <!-- Chrome bar -->
+  <rect x="40" y="40" width="1120" height="38" rx="10" ry="10" fill="#151921"/>
+  <rect x="40" y="64" width="1120" height="14" fill="#151921"/>
+  <line x1="40" y1="78" x2="1160" y2="78" stroke="#232833" stroke-width="1"/>
+
+  <!-- Chrome contents -->
+  <rect x="62" y="56" width="10" height="10" rx="2" fill="#6ee7c1"/>
+  <text x="78" y="65" fill="#8a93a3" font-size="10.5" letter-spacing="1.4" font-family="Geist Mono, SF Mono, monospace">CONVERSATION TIMELINE · SESSION 4D2BFF</text>
+  <rect x="1060" y="51" width="86" height="18" rx="9" fill="#232833"/>
+  <text x="1103" y="64" fill="#8a93a3" font-size="10" letter-spacing="1.2" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">STATE · D · FORK + MERGE</text>
+
+  <!-- ── Session strip ──────────────────────────────────────────────── -->
+  <text x="72" y="118" fill="#e8ebef" font-size="22" font-family="Source Serif 4, Georgia, serif" font-weight="500" letter-spacing="-0.5">
+    Ship SMS notifications <tspan fill="#8a93a3" font-style="italic">— sub-agents converged at 14:42</tspan>
+  </text>
+  <text x="72" y="140" fill="#8a93a3" font-size="11" font-family="Geist Mono, SF Mono, monospace">
+    session <tspan fill="#e8ebef" font-weight="500">4d2bff</tspan>  ·  branch <tspan fill="#e8ebef" font-weight="500">feat/sms-notifications</tspan>  ·  elapsed <tspan fill="#e8ebef" font-weight="500">13m</tspan>  ·  tokens <tspan fill="#e8ebef" font-weight="500">418k · combined</tspan>
+  </text>
+  <line x1="72" y1="156" x2="1128" y2="156" stroke="#232833" stroke-width="1"/>
+
+  <!-- ── Annotation banner ──────────────────────────────────────────── -->
+  <rect x="72" y="172" width="1056" height="40" rx="6" fill="#151921" stroke="#2c323e" stroke-width="1" stroke-dasharray="4 4"/>
+  <rect x="88" y="183" width="34" height="14" rx="3" fill="#122723"/>
+  <text x="105" y="194" fill="#c1f5e3" font-size="9" letter-spacing="1.0" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-weight="500">NOTE</text>
+  <text x="132" y="194" fill="#8a93a3" font-size="12.5" font-family="Source Serif 4, Georgia, serif" font-style="italic">
+    Three sub-agents fork from the orchestrator's dispatch decision, run in parallel, and converge into a single merge node.
+  </text>
+
+  <!-- ── Trunk (vertical timeline rail) ─────────────────────────────── -->
+  <!-- Rail line on left -->
+  <line x1="99" y1="230" x2="99" y2="700" stroke="#2c323e" stroke-width="1"/>
+
+  <!-- Node 1: orchestrator completed -->
+  <circle cx="99" cy="244" r="6" fill="#8a93a3" stroke="#8a93a3" stroke-width="1.5"/>
+  <text x="68" y="266" fill="#5a6172" font-size="9.5" font-family="Geist Mono, SF Mono, monospace">14:33:18</text>
+  <rect x="124" y="232" width="1004" height="44" rx="6" fill="#0e1116" stroke="#232833" stroke-width="1"/>
+  <text x="140" y="251" fill="#8a93a3" font-size="11" font-family="Geist Mono, SF Mono, monospace">▪ orchestrator</text>
+  <rect x="237" y="240" width="80" height="16" rx="9" fill="#11201a"/>
+  <text x="277" y="252" fill="#86efac" font-size="9.5" letter-spacing="0.5" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">COMPLETED</text>
+  <text x="332" y="252" fill="#8a93a3" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">14:33  <tspan fill="#5a6172">13m ago</tspan></text>
+  <text x="140" y="270" fill="#e8ebef" font-size="13" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Mapped scope — 3 disjoint domains, no file overlap</text>
+
+  <!-- Node 2: dispatch (apricot-tinted) -->
+  <circle cx="99" cy="296" r="6" fill="#9af0d4" stroke="#9af0d4" stroke-width="1.5"/>
+  <text x="68" y="318" fill="#5a6172" font-size="9.5" font-family="Geist Mono, SF Mono, monospace">14:34:04</text>
+  <rect x="124" y="284" width="1004" height="44" rx="6" fill="url(#dispatchTint)" stroke="#6ee7c1" stroke-width="1.2"/>
+  <text x="140" y="303" fill="#9af0d4" font-size="11" font-family="Geist Mono, SF Mono, monospace">▪ orchestrator</text>
+  <rect x="237" y="292" width="80" height="16" rx="9" fill="#122723"/>
+  <text x="277" y="304" fill="#9af0d4" font-size="9.5" letter-spacing="0.5" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">DECISION</text>
+  <text x="332" y="304" fill="#8a93a3" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">14:34  <tspan fill="#5a6172">12m ago</tspan></text>
+  <text x="140" y="322" fill="#e8ebef" font-size="13" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Dispatch — fork into 3 sub-agents</text>
+
+  <!-- ── Fork SVG (3 Béziers from trunk to 3 lanes) ─────────────────── -->
+  <g transform="translate(0, 334)">
+    <path d="M99 0 L99 56" stroke="#9af0d4" stroke-width="1.2" fill="none"/>
+    <path d="M99 0 C99 32, 410 24, 410 56" stroke="#93c5fd" stroke-width="1.2" fill="none"/>
+    <path d="M99 0 C99 40, 805 16, 805 56" stroke="#86efac" stroke-width="1.2" fill="none"/>
+  </g>
+
+  <!-- ── 3-lane grid (lane headers + one card each) ─────────────────── -->
+  <!-- Lane 1: ui-agent (apricot) -->
+  <g transform="translate(40, 398)">
+    <rect x="32" y="0" width="328" height="22" rx="3" fill="#0e1116" stroke="#232833" stroke-width="1"/>
+    <rect x="40" y="6" width="10" height="10" rx="2" fill="#9af0d4"/>
+    <text x="56" y="15" fill="#9af0d4" font-size="11" font-family="Geist Mono, SF Mono, monospace" font-weight="500">ui-agent</text>
+    <text x="349" y="15" fill="#5a6172" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">a1f9</text>
+  </g>
+  <g transform="translate(40, 426)">
+    <line x1="59" y1="0" x2="59" y2="56" stroke="#2c323e" stroke-width="1"/>
+    <circle cx="59" cy="14" r="6" fill="#9af0d4" stroke="#9af0d4" stroke-width="1"/>
+    <rect x="84" y="6" width="276" height="42" rx="6" fill="#0e1116" stroke="#232833"/>
+    <text x="98" y="22" fill="#9af0d4" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">▪ ui-agent</text>
+    <rect x="180" y="11" width="78" height="14" rx="7" fill="#11201a"/>
+    <text x="219" y="22" fill="#86efac" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">COMPLETED</text>
+    <text x="98" y="40" fill="#e8ebef" font-size="12" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Migrated 4 components</text>
+  </g>
+
+  <!-- Lane 2: backend-agent (info blue) -->
+  <g transform="translate(396, 398)">
+    <rect x="32" y="0" width="328" height="22" rx="3" fill="#0e1116" stroke="#232833" stroke-width="1"/>
+    <rect x="40" y="6" width="10" height="10" rx="2" fill="#93c5fd"/>
+    <text x="56" y="15" fill="#93c5fd" font-size="11" font-family="Geist Mono, SF Mono, monospace" font-weight="500">backend-agent</text>
+    <text x="349" y="15" fill="#5a6172" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">b2e7</text>
+  </g>
+  <g transform="translate(396, 426)">
+    <line x1="59" y1="0" x2="59" y2="56" stroke="#2c323e" stroke-width="1"/>
+    <circle cx="59" cy="14" r="6" fill="#93c5fd" stroke="#93c5fd" stroke-width="1"/>
+    <rect x="84" y="6" width="276" height="42" rx="6" fill="#0e1116" stroke="#232833"/>
+    <text x="98" y="22" fill="#93c5fd" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">▪ backend-agent</text>
+    <rect x="206" y="11" width="78" height="14" rx="7" fill="#11201a"/>
+    <text x="245" y="22" fill="#86efac" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">COMPLETED</text>
+    <text x="98" y="40" fill="#e8ebef" font-size="12" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Migration v37 + handlers</text>
+  </g>
+
+  <!-- Lane 3: infra-agent (success green) -->
+  <g transform="translate(752, 398)">
+    <rect x="32" y="0" width="328" height="22" rx="3" fill="#0e1116" stroke="#232833" stroke-width="1"/>
+    <rect x="40" y="6" width="10" height="10" rx="2" fill="#86efac"/>
+    <text x="56" y="15" fill="#86efac" font-size="11" font-family="Geist Mono, SF Mono, monospace" font-weight="500">infra-agent</text>
+    <text x="349" y="15" fill="#5a6172" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">c3d4</text>
+  </g>
+  <g transform="translate(752, 426)">
+    <line x1="59" y1="0" x2="59" y2="56" stroke="#2c323e" stroke-width="1"/>
+    <circle cx="59" cy="14" r="6" fill="#fcd34d" stroke="#fcd34d" stroke-width="1"/>
+    <rect x="84" y="6" width="276" height="42" rx="6" fill="#0e1116" stroke="#232833"/>
+    <text x="98" y="22" fill="#fcd34d" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">▪ infra-agent</text>
+    <rect x="194" y="11" width="62" height="14" rx="7" fill="#221a10"/>
+    <text x="225" y="22" fill="#fcd34d" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">BLOCKED</text>
+    <text x="98" y="40" fill="#e8ebef" font-size="12" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Flag namespace collision</text>
+  </g>
+
+  <!-- ── Merge SVG (3 → 1 reverse curves) ───────────────────────────── -->
+  <g transform="translate(0, 490)">
+    <path d="M99 0 L99 56" stroke="#9af0d4" stroke-width="1.2" fill="none"/>
+    <path d="M455 0 C455 32, 99 24, 99 56" stroke="#93c5fd" stroke-width="1.2" fill="none"/>
+    <path d="M811 0 C811 40, 99 16, 99 56" stroke="#86efac" stroke-width="1.2" fill="none"/>
+  </g>
+
+  <!-- ── Merge card (the 22px ringed marker + 3-column contribution) ── -->
+  <!-- Big ringed marker -->
+  <circle cx="99" cy="560" r="13" fill="#8a93a3" stroke="#0e1116" stroke-width="2"/>
+  <circle cx="99" cy="560" r="14" fill="none" stroke="#2c323e" stroke-width="1"/>
+  <text x="68" y="588" fill="#5a6172" font-size="9.5" font-family="Geist Mono, SF Mono, monospace">14:42:11</text>
+
+  <!-- Merge card -->
+  <rect x="124" y="544" width="1004" height="138" rx="10" fill="#0e1116" stroke="#2c323e" stroke-width="1" filter="url(#cardShadow)"/>
+  <rect x="124" y="544" width="1004" height="44" rx="10" fill="#151921"/>
+  <rect x="124" y="582" width="1004" height="6" fill="#151921"/>
+  <line x1="124" y1="588" x2="1128" y2="588" stroke="#232833" stroke-width="1"/>
+
+  <!-- Merge head -->
+  <rect x="140" y="556" width="92" height="18" rx="3" fill="#0e1116" stroke="#232833" stroke-width="1"/>
+  <text x="186" y="569" fill="#8a93a3" font-size="10" letter-spacing="1.0" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">MERGE · 3 → 1</text>
+  <text x="244" y="571" fill="#e8ebef" font-size="15" font-family="Source Serif 4, Georgia, serif" font-weight="500">All sub-agents converged — synthesizing for review</text>
+  <text x="1116" y="571" fill="#8a93a3" font-size="10.5" text-anchor="end" font-family="Geist Mono, SF Mono, monospace">14:42:11Z · 8m total</text>
+  <!-- Agent swatches in header -->
+  <rect x="1024" y="557" width="18" height="4" rx="2" fill="#9af0d4"/>
+  <rect x="1046" y="557" width="18" height="4" rx="2" fill="#93c5fd"/>
+  <rect x="1068" y="557" width="18" height="4" rx="2" fill="#86efac"/>
+
+  <!-- Contributions: 3 columns -->
+  <line x1="458" y1="588" x2="458" y2="682" stroke="#232833" stroke-width="1"/>
+  <line x1="793" y1="588" x2="793" y2="682" stroke="#232833" stroke-width="1"/>
+
+  <!-- Col 1: ui-agent -->
+  <rect x="140" y="600" width="8" height="8" rx="2" fill="#9af0d4"/>
+  <text x="154" y="608" fill="#9af0d4" font-size="11" font-family="Geist Mono, SF Mono, monospace">ui-agent · a1f9</text>
+  <text x="140" y="628" fill="#e8ebef" font-size="13" font-family="-apple-system, system-ui, sans-serif" font-weight="500">4 components migrated</text>
+  <text x="140" y="648" fill="#8a93a3" font-size="11.5" font-family="-apple-system, system-ui, sans-serif">Spring transitions, 22 stories pass.</text>
+  <text x="140" y="672" fill="#5a6172" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">
+    <tspan fill="#e8ebef" font-weight="500">+72</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">−45</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">38</tspan> tests ✓  ·  <tspan fill="#e8ebef" font-weight="500">2m</tspan>
+  </text>
+
+  <!-- Col 2: backend-agent -->
+  <rect x="476" y="600" width="8" height="8" rx="2" fill="#93c5fd"/>
+  <text x="490" y="608" fill="#93c5fd" font-size="11" font-family="Geist Mono, SF Mono, monospace">backend-agent · b2e7</text>
+  <text x="476" y="628" fill="#e8ebef" font-size="13" font-family="-apple-system, system-ui, sans-serif" font-weight="500">1 handler + migration v37</text>
+  <text x="476" y="648" fill="#8a93a3" font-size="11.5" font-family="-apple-system, system-ui, sans-serif">Additive schema, 412 tests green.</text>
+  <text x="476" y="672" fill="#5a6172" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">
+    <tspan fill="#e8ebef" font-weight="500">+318</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">−12</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">412</tspan> tests ✓  ·  <tspan fill="#e8ebef" font-weight="500">3m</tspan>
+  </text>
+
+  <!-- Col 3: infra-agent -->
+  <rect x="811" y="600" width="8" height="8" rx="2" fill="#86efac"/>
+  <text x="825" y="608" fill="#86efac" font-size="11" font-family="Geist Mono, SF Mono, monospace">infra-agent · c3d4</text>
+  <text x="811" y="628" fill="#e8ebef" font-size="13" font-family="-apple-system, system-ui, sans-serif" font-weight="500">Twilio env + bounce alarm</text>
+  <text x="811" y="648" fill="#8a93a3" font-size="11.5" font-family="-apple-system, system-ui, sans-serif">One block (resolved). Flag at 0%.</text>
+  <text x="811" y="672" fill="#5a6172" font-size="10.5" font-family="Geist Mono, SF Mono, monospace">
+    <tspan fill="#e8ebef" font-weight="500">+44</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">−2</tspan> lines  ·  <tspan fill="#e8ebef" font-weight="500">1</tspan> block <tspan fill="#fcd34d">⚠</tspan>  ·  <tspan fill="#e8ebef" font-weight="500">3m</tspan>
+  </text>
+
+  <!-- ── Legend ─────────────────────────────────────────────────────── -->
+  <g transform="translate(72, 712)" font-family="Geist Mono, SF Mono, monospace" font-size="10.5" fill="#8a93a3" letter-spacing="0.6">
+    <rect x="0" y="2" width="12" height="6" rx="2" fill="#8a93a3"/><text x="18" y="10">ORCHESTRATOR</text>
+    <rect x="142" y="2" width="12" height="6" rx="2" fill="#9af0d4"/><text x="160" y="10">UI-AGENT</text>
+    <rect x="236" y="2" width="12" height="6" rx="2" fill="#93c5fd"/><text x="254" y="10">BACKEND-AGENT</text>
+    <rect x="376" y="2" width="12" height="6" rx="2" fill="#86efac"/><text x="394" y="10">INFRA-AGENT</text>
+  </g>
+
+  <text x="1116" y="722" fill="#5a6172" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">claudecadence · v2.0 · iter6 visual language</text>
+</svg>
