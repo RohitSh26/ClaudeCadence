@@ -2834,6 +2834,29 @@ mark {
   font-size: 10px;
   white-space: nowrap;
 }
+/* v1.10.0: fork/merge rows get visual prominence + paired-tuid badge.
+   The .tuid badge shows the last 6 chars of source_tool_use_id; hover for
+   the full id. Matching fork and merge will display the same suffix. */
+.child-group-body .child-row.is-fork  { background: linear-gradient(90deg, var(--apricot-100) 0%, transparent 60%); }
+.child-group-body .child-row.is-fork  .target { font-weight: 500; color: var(--apricot-700); }
+.child-group-body .child-row.is-merge { background: linear-gradient(90deg, var(--success-bg) 0%, transparent 60%); }
+.child-group-body .child-row.is-merge .target { font-weight: 500; color: var(--success); }
+.child-group-body .child-row .tuid {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--apricot-600);
+  background: var(--apricot-100);
+  border: 1px solid var(--apricot-500);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-right: 8px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: help;
+}
+[data-theme="dark"] .child-group-body .child-row .tuid {
+  color: var(--apricot-700);
+}
 .child-group-body .more-link {
   display: block;
   padding: 6px 14px 4px;

@@ -1291,10 +1291,20 @@
         const groupBody = el('div','child-group-body');
         visible.forEach(c => {
           const row = el('div','child-row');
+          if (c.kind === 'fork')  row.classList.add('is-fork');
+          if (c.kind === 'merge') row.classList.add('is-merge');
           const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
           const tg  = el('span','target'); tg.textContent  = childTargetText(c);
           const me  = el('span','meta');   me.textContent  = c.agent || '';
           if (c.status === 'failed') me.classList.add('fail');
+          // Show source_tool_use_id as a paired-id badge — the renderer's
+          // visual cue that fork↔merge are part of the same dispatch.
+          if (c.source_tool_use_id) {
+            const tuid = el('span','tuid');
+            tuid.title = 'paired dispatch id: ' + c.source_tool_use_id;
+            tuid.textContent = '↔ ' + c.source_tool_use_id.slice(-6);
+            row.appendChild(tuid);
+          }
           row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
           groupBody.appendChild(row);
         });
@@ -1312,10 +1322,18 @@
             const newBody = el('div','child-group-body');
             items.forEach(c => {
               const row = el('div','child-row');
+              if (c.kind === 'fork')  row.classList.add('is-fork');
+              if (c.kind === 'merge') row.classList.add('is-merge');
               const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
               const tg  = el('span','target'); tg.textContent  = childTargetText(c);
               const me  = el('span','meta');   me.textContent  = c.agent || '';
               if (c.status === 'failed') me.classList.add('fail');
+              if (c.source_tool_use_id) {
+                const tuid = el('span','tuid');
+                tuid.title = 'paired dispatch id: ' + c.source_tool_use_id;
+                tuid.textContent = '↔ ' + c.source_tool_use_id.slice(-6);
+                row.appendChild(tuid);
+              }
               row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
               newBody.appendChild(row);
             });
