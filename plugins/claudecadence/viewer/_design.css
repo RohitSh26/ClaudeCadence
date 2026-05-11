@@ -3220,8 +3220,12 @@ body { line-height: 1.65; }
 .dispatch-curve {
   display: block;
   width: 100%;
-  height: 36px;
+  height: 56px;             /* matches iter6 spec (was 36) */
   margin: 0;
+  overflow: visible;        /* let stroke-width 2.5 spill cleanly at edges */
+}
+.dispatch-curve path {
+  filter: drop-shadow(0 0 6px var(--apricot-glow));
 }
 
 /* — Lane label — */
@@ -3342,3 +3346,98 @@ body { line-height: 1.65; }
 }
 .turn-card.has-dispatch + .turn .rail .marker.is-filled,
 .turn.has-dispatch .rail .marker.is-filled { background: var(--apricot-500); }
+
+/* v2.0.2: multi-lane parallel dispatch — N lanes side-by-side */
+.dispatch-lanes {
+  display: grid;
+  grid-template-columns: repeat(var(--lane-count, 1), minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.dispatch-lane-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dispatch-lane-col .dispatch-lane-label {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 11px;
+  font-weight: 500;
+  color: var(--lane, var(--lane-trunk));
+  padding: 6px 10px;
+  background: var(--paper);
+  border: 1px solid var(--soft);
+  border-top: 2px solid var(--lane, var(--lane-trunk));
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.dispatch-lane-col .dispatch-lane-label .swatch {
+  width: 8px; height: 8px; border-radius: 2px;
+  background: var(--lane, var(--lane-trunk));
+}
+.dispatch-lane-col .dispatch-lane-label .id { color: var(--neutral-400); margin-left: auto; font-size: 10px; }
+.dispatch-lane-col .dispatch-lane-body {
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--mid);
+  border-left: 2px solid var(--lane);
+  background: var(--paper);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-left: 0;
+}
+.dispatch-lane-col .dispatch-lane-body .meta strong { color: var(--ink); font-weight: 500; }
+.dispatch-lane-col .dispatch-lane-body .meta.dim    { color: var(--neutral-400); font-style: italic; }
+
+/* Multi-lane merge card with N contribution columns */
+.dispatch-contribs {
+  display: grid;
+  grid-template-columns: repeat(var(--lane-count, 1), minmax(0, 1fr));
+  gap: 0;
+}
+.dispatch-contrib {
+  padding: 12px 14px;
+  border-right: 1px solid var(--soft);
+  font-size: 12px;
+  border-top: 2px solid var(--lane, var(--lane-trunk));
+}
+.dispatch-contrib:last-child { border-right: none; }
+.dispatch-contrib .contrib-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px;
+  color: var(--lane, var(--lane-trunk));
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+}
+.dispatch-contrib .contrib-head .swatch {
+  width: 8px; height: 8px; border-radius: 2px;
+  background: var(--lane, var(--lane-trunk));
+}
+.dispatch-contrib .contrib-head .id { color: var(--neutral-400); font-size: 10px; }
+.dispatch-contrib .contrib-body {
+  margin: 0;
+  color: var(--mid);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.dispatch-contrib .contrib-body.dim { color: var(--neutral-400); font-style: italic; }
+
+/* Agent swatches in merge-head */
+.dispatch-merge-head .agents-summary {
+  display: inline-flex; gap: 4px; margin-left: auto;
+}
+.dispatch-merge-head .agents-summary .agent-swatch {
+  width: 18px; height: 4px; border-radius: 2px;
+}
+
+/* Make the curve SVGs taller and clearly visible */
+.dispatch-curve {
+  height: 56px;
+  overflow: visible;
+}
+
+/* Wrap responsive: stack lanes vertically below 720px */
+@media (max-width: 720px) {
+  .dispatch-lanes, .dispatch-contribs { grid-template-columns: 1fr; }
+  .dispatch-contrib { border-right: none; border-bottom: 1px solid var(--soft); }
+  .dispatch-contrib:last-child { border-bottom: none; }
+}

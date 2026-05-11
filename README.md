@@ -2,7 +2,10 @@
 
 > See the rhythm of your multi-agent Claude Code sessions.
 
-![ClaudeCadence timeline — fork through merge](docs/img/timeline.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/timeline-dark.svg">
+  <img alt="ClaudeCadence timeline — fork through merge" src="docs/img/timeline-light.svg">
+</picture>
 
 ClaudeCadence is a Claude Code plugin that gives you a **live HTML timeline** of your sessions — every tool call, every sub-agent fork, every PR opened, every decision made — rendered as an expandable, filterable, fork-aware vertical timeline you open in your browser.
 

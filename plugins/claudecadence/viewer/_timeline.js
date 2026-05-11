@@ -1147,34 +1147,104 @@
     return parts.join(' · ');
   }
 
+  // ─── v2.0: SVG helpers — innerHTML on <svg> drops SVG-namespaced
+  // children in some browsers. createElementNS for everything.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function svgEl(name, attrs) {
+    const e = document.createElementNS(SVG_NS, name);
+    if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  // Build N curves fanning out from trunk (top center) to N lane heads
+  // (bottom, evenly spaced), or N curves converging back to trunk.
+  // Each curve is colored by its lane.
+  function buildFanSvg(direction, laneColors) {
+    const n = laneColors.length;
+    const W = 1200, H = 56;
+    const svg = svgEl('svg', {
+      'class': 'dispatch-curve dispatch-curve-' + direction,
+      viewBox: '0 0 ' + W + ' ' + H,
+      preserveAspectRatio: 'none',
+    });
+    // Trunk x is at left (close to dispatch-card's left edge).
+    const trunkX = 28;
+    for (let i = 0; i < n; i++) {
+      // Lane center x along the bottom: spread evenly across width
+      const laneX = n === 1
+        ? W * 0.5
+        : 28 + (W - 56) * (i + 0.5) / n;
+      // Fork: curve from (trunkX, 0) down to (laneX, H)
+      // Merge: curve from (laneX, 0) down to (trunkX, H)
+      const startX = direction === 'fork' ? trunkX : laneX;
+      const endX   = direction === 'fork' ? laneX   : trunkX;
+      const d = `M${startX} 0 C${startX} ${H * 0.7}, ${endX} ${H * 0.3}, ${endX} ${H}`;
+      svg.appendChild(svgEl('path', {
+        d,
+        stroke: laneColors[i],
+        'stroke-width': '2',
+        'stroke-linecap': 'round',
+        fill: 'none',
+        opacity: '0.9',
+      }));
+    }
+    return svg;
+  }
+
   // ─── v2.0: Dispatch-group rendering ───────────────────────────────
   // Detect paired fork+merge nodes by source_tool_use_id within a turn's
-  // children. Returns an array of { fork, merges[], subagentName } groups.
-  // A group requires AT LEAST a fork. Merge may be missing (in-flight
-  // dispatch). Multiple merges with the same tuid (e.g. PostToolUse +
-  // un-deduped SubagentStop) all get included — the renderer shows them
-  // collapsed.
+  // children. Adjacent-in-time forks (within CLUSTER_WINDOW_MS) get grouped
+  // into ONE parallel-dispatch unit with N lanes. Each lane has:
+  //   { fork, merges[], merge, subagentName, tuid }
+  // Returns: array of cluster objects: { lanes[], firstFork, lastMergeOrFork }
+  const CLUSTER_WINDOW_MS = 30 * 1000;       // forks within 30s = same parallel dispatch
   function collectDispatchGroups(children) {
     if (!children || !children.length) return [];
-    const forks = children.filter(c => c.kind === 'fork' && c.source_tool_use_id);
+    const forks = children
+      .filter(c => c.kind === 'fork' && c.source_tool_use_id)
+      .slice()
+      .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
     if (!forks.length) return [];
-    const groups = [];
-    for (const f of forks) {
+
+    function laneFor(f) {
       const merges = children.filter(c =>
         c.kind === 'merge' && c.source_tool_use_id === f.source_tool_use_id
       );
       const subagentName = merges.length && merges[0].agent
         ? merges[0].agent
         : (f.title || '').match(/Dispatched → ([^:]+)/)?.[1]?.trim() || 'subagent';
-      groups.push({
+      return {
         fork: f,
-        merges,                              // array (could be 1 PostToolUse + leftover SubagentStop)
-        merge: merges[0] || null,            // preferred one
+        merges,
+        merge: merges[0] || null,
         subagentName,
         tuid: f.source_tool_use_id,
-      });
+      };
     }
-    return groups;
+
+    // Cluster adjacent-in-time forks. New cluster when gap > CLUSTER_WINDOW_MS.
+    const clusters = [];
+    for (const f of forks) {
+      const lane = laneFor(f);
+      const last = clusters[clusters.length - 1];
+      if (!last) { clusters.push({ lanes: [lane] }); continue; }
+      const prevTs = Date.parse(last.lanes[last.lanes.length - 1].fork.ts);
+      const thisTs = Date.parse(f.ts);
+      if (Number.isFinite(prevTs) && Number.isFinite(thisTs) && (thisTs - prevTs) <= CLUSTER_WINDOW_MS) {
+        last.lanes.push(lane);
+      } else {
+        clusters.push({ lanes: [lane] });
+      }
+    }
+    // Convenience pointers for rendering
+    for (const c of clusters) {
+      c.firstFork = c.lanes[0].fork;
+      // Latest merge across the cluster (for the merge-card timestamp)
+      const allMerges = c.lanes.flatMap(l => l.merges);
+      c.latestMerge = allMerges.length
+        ? allMerges.reduce((a, b) => Date.parse(a.ts) > Date.parse(b.ts) ? a : b)
+        : null;
+    }
+    return clusters;
   }
 
   // Lane color for a subagent name — uses the same palette as the trunk's
@@ -1187,96 +1257,132 @@
     return palette[h % palette.length];
   }
 
-  // Render a single dispatch group as the iter6 fork→merge visual.
-  // The structure mirrors mocks/04-fork-merge.html in compact form:
-  //   ┌────────────────────────────────────────────────────────────┐
-  //   │  ▸ dispatch-card (apricot tint)                            │
-  //   ├────────────────────────────────────────────────────────────┤
-  //   │  ╱ fork SVG (1 → 1 here, the one lane that's the subagent) │
-  //   │  │ lane label                                                │
-  //   │  │ (subagent activity — count only for now)                  │
-  //   │  ╲ merge SVG                                                  │
-  //   ├────────────────────────────────────────────────────────────┤
-  //   │  ▸ merge-card (the 22px ringed marker + lane contributions) │
-  //   └────────────────────────────────────────────────────────────┘
-  function renderDispatchGroup(dg) {
+  // Render a parallel dispatch cluster (1 → N → 1) as the iter6 visual.
+  //   ┌─────────────────────────────────────────────────────────┐
+  //   │  ▸ FORK dispatch-card                                   │
+  //   ├─────────────────────────────────────────────────────────┤
+  //   │  ╲   |   ╱      fork SVG: N lane-colored curves         │
+  //   ├─────┬─────┬─────┤
+  //   │ lbl │ lbl │ lbl │  lane labels (N columns)
+  //   │ body│ body│ body│  lane bodies (wall-time / status)
+  //   ├─────┴─────┴─────┤
+  //   │  ╱   |   ╲      merge SVG: N curves converging back     │
+  //   ├─────────────────────────────────────────────────────────┤
+  //   │  ▸ MERGE merge-card                                     │
+  //   │    │ col │ col │ col │  contribution columns (N)        │
+  //   └─────────────────────────────────────────────────────────┘
+  function renderDispatchGroup(cluster) {
+    const lanes = cluster.lanes;
+    const n = lanes.length;
+    const laneColors = lanes.map(l => laneColorFor(l.subagentName));
+
     const wrap = el('div','dispatch-group');
-    wrap.dataset.tuid = dg.tuid || '';
-    wrap.style.setProperty('--lane', laneColorFor(dg.subagentName));
+    wrap.dataset.lanes = String(n);
+    wrap.dataset.tuid = lanes[0].tuid || '';
+    wrap.style.setProperty('--lane-count', String(n));
+    wrap.style.setProperty('--lane', laneColors[0]);
 
     // ── 1. Dispatch (fork) card ─────────────────────────────────────
-    const forkRow = el('div','dispatch-fork');
     const forkCard = el('div','dispatch-card');
     const fhead = el('div','dispatch-head');
+    const firstFork = cluster.firstFork;
+    const title = n === 1
+      ? (firstFork.title || 'Dispatched → ' + lanes[0].subagentName)
+      : 'Dispatch — ' + n + ' sub-agents in parallel';
     fhead.innerHTML =
       '<span class="dispatch-tag">FORK</span>' +
-      '<span class="dispatch-title">' + escapeHtml(dg.fork.title || 'Dispatched → ' + dg.subagentName) + '</span>' +
-      '<span class="dispatch-tuid" title="' + escapeHtml(dg.tuid || '') + '">↔ ' +
-        escapeHtml((dg.tuid || '').slice(-6)) + '</span>' +
-      '<span class="dispatch-time">' + escapeHtml(shortTime(dg.fork.ts)) + '</span>';
+      '<span class="dispatch-title">' + escapeHtml(title) + '</span>' +
+      (n === 1
+        ? '<span class="dispatch-tuid" title="' + escapeHtml(lanes[0].tuid || '') + '">↔ ' +
+            escapeHtml((lanes[0].tuid || '').slice(-6)) + '</span>'
+        : '<span class="dispatch-tuid">' + n + ' lanes</span>') +
+      '<span class="dispatch-time">' + escapeHtml(shortTime(firstFork.ts)) + '</span>';
     forkCard.appendChild(fhead);
-    if (dg.fork.summary) {
-      const s = el('p','dispatch-summary'); s.textContent = dg.fork.summary;
+    if (n === 1 && firstFork.summary) {
+      const s = el('p','dispatch-summary'); s.textContent = firstFork.summary;
+      forkCard.appendChild(s);
+    } else if (n > 1) {
+      const s = el('p','dispatch-summary');
+      s.textContent = lanes.map(l => l.subagentName).join(' · ');
       forkCard.appendChild(s);
     }
-    forkRow.appendChild(forkCard);
-    wrap.appendChild(forkRow);
+    wrap.appendChild(forkCard);
 
-    // ── 2. Fork SVG curve to lane ───────────────────────────────────
-    const svg1 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg1.setAttribute('class', 'dispatch-curve dispatch-curve-fork');
-    svg1.setAttribute('viewBox', '0 0 100 36');
-    svg1.setAttribute('preserveAspectRatio', 'none');
-    svg1.innerHTML = '<path d="M2 0 C2 18, 50 18, 50 36" stroke="var(--lane)" stroke-width="1.4" fill="none"/>';
-    wrap.appendChild(svg1);
+    // ── 2. Fork SVG fan-out ─────────────────────────────────────────
+    wrap.appendChild(buildFanSvg('fork', laneColors));
 
-    // ── 3. Lane label ───────────────────────────────────────────────
-    const laneLabel = el('div','dispatch-lane-label');
-    laneLabel.innerHTML =
-      '<span class="swatch"></span>' +
-      '<span class="name">' + escapeHtml(dg.subagentName) + '</span>' +
-      '<span class="id">' + escapeHtml((dg.tuid || '').slice(-4)) + '</span>';
-    wrap.appendChild(laneLabel);
-
-    // ── 4. Lane body — "subagent ran for Nm" if we have both ends ───
-    if (dg.fork && dg.merge) {
-      const ms = Date.parse(dg.merge.ts) - Date.parse(dg.fork.ts);
-      const elapsed = Number.isFinite(ms) && ms > 0 ? fmtElapsed(ms) : '—';
-      const laneBody = el('div','dispatch-lane-body');
-      laneBody.innerHTML =
-        '<span class="meta">subagent ran for <strong>' + escapeHtml(elapsed) + '</strong></span>';
-      if (dg.merges.length > 1) {
-        laneBody.innerHTML += '  <span class="meta dim">· ' + dg.merges.length +
-          ' merges captured (PostToolUse + SubagentStop)</span>';
+    // ── 3. Lane headers + bodies in CSS grid ────────────────────────
+    const laneRow = el('div','dispatch-lanes');
+    laneRow.style.setProperty('--lane-count', String(n));
+    lanes.forEach((lane, idx) => {
+      const col = el('div','dispatch-lane-col');
+      col.style.setProperty('--lane', laneColors[idx]);
+      // Lane label
+      const lbl = el('div','dispatch-lane-label');
+      lbl.innerHTML =
+        '<span class="swatch"></span>' +
+        '<span class="name">' + escapeHtml(lane.subagentName) + '</span>' +
+        '<span class="id">' + escapeHtml((lane.tuid || '').slice(-4)) + '</span>';
+      col.appendChild(lbl);
+      // Lane body
+      const body = el('div','dispatch-lane-body');
+      if (lane.merge) {
+        const ms = Date.parse(lane.merge.ts) - Date.parse(lane.fork.ts);
+        const elapsed = Number.isFinite(ms) && ms > 0 ? fmtElapsed(ms) : '—';
+        body.innerHTML = '<span class="meta">ran <strong>' + escapeHtml(elapsed) + '</strong></span>';
+      } else {
+        body.innerHTML = '<span class="meta dim">in flight…</span>';
       }
-      wrap.appendChild(laneBody);
-    } else {
-      const laneBody = el('div','dispatch-lane-body');
-      laneBody.innerHTML = '<span class="meta dim">subagent in flight…</span>';
-      wrap.appendChild(laneBody);
+      col.appendChild(body);
+      laneRow.appendChild(col);
+    });
+    wrap.appendChild(laneRow);
+
+    // ── 4. Merge SVG fan-in (only if at least one lane has a merge) ──
+    const anyMerge = lanes.some(l => l.merge);
+    if (anyMerge) {
+      wrap.appendChild(buildFanSvg('merge', laneColors));
     }
 
-    // ── 5. Merge SVG curve back to trunk ────────────────────────────
-    if (dg.merge) {
-      const svg2 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg2.setAttribute('class', 'dispatch-curve dispatch-curve-merge');
-      svg2.setAttribute('viewBox', '0 0 100 36');
-      svg2.setAttribute('preserveAspectRatio', 'none');
-      svg2.innerHTML = '<path d="M50 0 C50 18, 2 18, 2 36" stroke="var(--lane)" stroke-width="1.4" fill="none"/>';
-      wrap.appendChild(svg2);
-
-      // ── 6. Merge card ────────────────────────────────────────────
+    // ── 5. Merge card with N contribution columns ───────────────────
+    if (anyMerge) {
       const mergeCard = el('div','dispatch-merge-card');
       const mhead = el('div','dispatch-merge-head');
+      const mergeTitle = n === 1
+        ? (lanes[0].merge.title || (lanes[0].subagentName + ' done'))
+        : 'All sub-agents converged — ' + n + ' lanes';
       mhead.innerHTML =
-        '<span class="merge-tag">MERGE</span>' +
-        '<span class="merge-title">' + escapeHtml(dg.merge.title || (dg.subagentName + ' done')) + '</span>' +
-        '<span class="merge-time">' + escapeHtml(shortTime(dg.merge.ts)) + '</span>';
+        '<span class="merge-tag">MERGE · ' + n + ' → 1</span>' +
+        '<span class="merge-title">' + escapeHtml(mergeTitle) + '</span>' +
+        '<span class="merge-time">' + escapeHtml(shortTime((cluster.latestMerge || firstFork).ts)) + '</span>' +
+        '<span class="agents-summary">' +
+          lanes.map((_, i) =>
+            '<span class="agent-swatch" style="background:' + laneColors[i] + '"></span>'
+          ).join('') +
+        '</span>';
       mergeCard.appendChild(mhead);
-      if (dg.merge.summary) {
-        const ms = el('p','merge-summary-text'); ms.textContent = dg.merge.summary;
-        mergeCard.appendChild(ms);
-      }
+
+      const contribs = el('div','dispatch-contribs');
+      contribs.style.setProperty('--lane-count', String(n));
+      lanes.forEach((lane, idx) => {
+        const col = el('div','dispatch-contrib');
+        col.style.setProperty('--lane', laneColors[idx]);
+        const head = el('div','contrib-head');
+        head.innerHTML =
+          '<span class="swatch"></span>' +
+          '<span class="name">' + escapeHtml(lane.subagentName) + '</span>' +
+          '<span class="id">· ' + escapeHtml((lane.tuid || '').slice(-4)) + '</span>';
+        col.appendChild(head);
+        if (lane.merge && lane.merge.summary) {
+          const p = el('p','contrib-body'); p.textContent = lane.merge.summary;
+          col.appendChild(p);
+        } else if (!lane.merge) {
+          const p = el('p','contrib-body dim'); p.textContent = 'in flight…';
+          col.appendChild(p);
+        }
+        contribs.appendChild(col);
+      });
+      mergeCard.appendChild(contribs);
       wrap.appendChild(mergeCard);
     }
 
@@ -1306,11 +1412,13 @@
     if (!turn.response) card.open = true;
     // v2.0: also auto-open turns that contain paired fork+merge dispatch
     // groups, so the iter6 dispatch-group visual is immediately visible.
-    const turnDispatchGroups = collectDispatchGroups(turn.children || []);
-    if (turnDispatchGroups.length) {
+    const turnDispatchClusters = collectDispatchGroups(turn.children || []);
+    const turnLaneCount = turnDispatchClusters.reduce((s, c) => s + c.lanes.length, 0);
+    if (turnDispatchClusters.length) {
       card.open = true;
       card.classList.add('has-dispatch');
-      li.dataset.dispatchCount = turnDispatchGroups.length;
+      li.dataset.dispatchClusters = turnDispatchClusters.length;
+      li.dataset.dispatchLanes = turnLaneCount;
     }
 
     const sum = document.createElement('summary');
@@ -1355,12 +1463,12 @@
       const respPreview = turn.response ? `<span class="resp-preview">↪ ${escapeHtml(turn.response.summary || turn.response.title || '')}</span>` : '';
       // v2.0: dispatch-group count badge if this turn contains any.
       let dispatchBadge = '';
-      if (turnDispatchGroups.length) {
-        const names = [...new Set(turnDispatchGroups.map(g => g.subagentName))].slice(0, 3).join(', ');
+      if (turnDispatchClusters.length) {
+        const names = [...new Set(turnDispatchClusters.flatMap(c => c.lanes.map(l => l.subagentName)))].slice(0, 3).join(', ');
+        const noun = turnLaneCount === 1 ? 'dispatch' : 'dispatches';
         dispatchBadge =
           '<span class="dispatch-badge" title="paired fork+merge dispatch groups">' +
-          '🔀 ' + turnDispatchGroups.length + ' subagent ' +
-          (turnDispatchGroups.length === 1 ? 'dispatch' : 'dispatches') +
+          '🔀 ' + turnLaneCount + ' subagent ' + noun +
           (names ? ' · ' + escapeHtml(names) : '') +
           '</span>';
       }
@@ -1395,19 +1503,19 @@
       const childSection = el('div','turn-section');
       childSection.appendChild(el('div','section-label', `during this turn · ${turn.children.length}`));
 
-      // v2.0: detect paired fork+merge by source_tool_use_id and render them
-      // as a dispatch-group block (iter6 visual) BEFORE the regular tool
-      // buckets. Pulled-out nodes are excluded from bucketing below.
-      const dispatchGroups = collectDispatchGroups(turn.children);
+      // v2.0: detect paired fork+merge by source_tool_use_id and cluster
+      // adjacent forks into one parallel-dispatch block (iter6 1→N→1 visual).
+      const dispatchClusters = collectDispatchGroups(turn.children);
       const usedInDispatch = new Set();
-      for (const dg of dispatchGroups) {
-        if (dg.fork)  usedInDispatch.add(dg.fork.id);
-        if (dg.merge) usedInDispatch.add(dg.merge.id);
-        for (const m of dg.merges) usedInDispatch.add(m.id);
+      for (const c of dispatchClusters) {
+        for (const lane of c.lanes) {
+          if (lane.fork)  usedInDispatch.add(lane.fork.id);
+          for (const m of lane.merges) usedInDispatch.add(m.id);
+        }
       }
-      if (dispatchGroups.length) {
+      if (dispatchClusters.length) {
         const dispatchSection = el('div','dispatch-groups');
-        dispatchGroups.forEach(dg => dispatchSection.appendChild(renderDispatchGroup(dg)));
+        dispatchClusters.forEach(c => dispatchSection.appendChild(renderDispatchGroup(c)));
         childSection.appendChild(dispatchSection);
       }
 
