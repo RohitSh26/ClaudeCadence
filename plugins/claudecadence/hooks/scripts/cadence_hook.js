@@ -598,12 +598,21 @@ function handleSubagentStop(payload) {
     try { tuid = findUnpairedAgentToolUseId(payload.transcript_path, session); }
     catch (_) { /* leave tuid null */ }
   }
-  // Cross-handler dedup (v1.9.9): if PostToolUse already emitted a merge for
-  // this exact tool_use_id, skip the SubagentStop merge — we'd be double-
-  // counting. Skip only the merge node; still run the catch-up scan below so
+  // Cross-handler dedup (v1.9.9+): three ways this SubagentStop can be a
+  // duplicate of a PostToolUse merge for the same Agent dispatch —
+  //   1. Same tool_use_id already on an existing merge.
+  //   2. tuid was null (PostToolUse drained the only unpaired Agent fork),
+  //      AND this SubagentStop is for a NAMED subagent (not generic),
+  //      AND a paired merge for that named subagent fired recently — almost
+  //      certainly the same dispatch (v1.9.10).
+  // Skip only the merge node; still run the catch-up scan below so
   // orchestrator prompts/responses keep getting recovered.
   let skipMerge = false;
-  if (tuid && hasMergeForToolUseId(session, tuid)) skipMerge = true;
+  if (tuid && hasMergeForToolUseId(session, tuid)) {
+    skipMerge = true;
+  } else if (!tuid && hasRecentPairedMergeForAgent(session, sub, 600)) {
+    skipMerge = true;
+  }
   const merge = {
     agent: String(sub),
     kind: 'merge',
@@ -739,6 +748,28 @@ function hasMergeForToolUseId(session, tuid) {
       if ((n.session || 'main') !== session) continue;
       if ((n.kind || '') !== 'merge') continue;
       if (n.source_tool_use_id === tuid) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+// True if a paired merge for the same NAMED subagent fired recently in this
+// session. Used as a fallback when SubagentStop can't find a tool_use_id
+// (because PostToolUse already paired the most recent Agent dispatch) — the
+// SubagentStop is almost certainly the dupe for the same dispatch. Only
+// applies to named subagents; generic 'subagent' is treated as noise and
+// always emits. (v1.9.10)
+function hasRecentPairedMergeForAgent(session, agentName, windowSec) {
+  if (!agentName || agentName === 'subagent') return false;
+  const cutoff = Date.now() - windowSec * 1000;
+  try {
+    for (const n of loadNodes()) {
+      if ((n.session || 'main') !== session) continue;
+      if ((n.kind || '') !== 'merge') continue;
+      if (!n.source_tool_use_id) continue;             // only paired merges count
+      if ((n.agent || '') !== agentName) continue;
+      const ts = Date.parse(n.ts || '');
+      if (Number.isFinite(ts) && ts >= cutoff) return true;
     }
   } catch (_) {}
   return false;

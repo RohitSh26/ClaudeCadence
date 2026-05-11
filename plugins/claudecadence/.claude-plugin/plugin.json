@@ -1,7 +1,7 @@
 {
   "name": "claudecadence",
   "description": "Live HTML timeline viewer for Claude Code sessions. Hooks-driven, zero extra LLM cost.",
-  "version": "1.9.9",
+  "version": "1.9.10",
   "author": {
     "name": "Rohit Sharma"
   },
