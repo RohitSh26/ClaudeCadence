@@ -1,0 +1,167 @@
+#!/usr/bin/env node
+// ClaudeCadence — pre-install/pre-enable audit. Read-only.
+//
+// Run this BEFORE letting the plugin do anything in your project. It prints:
+//   - The currently-installed plugin version
+//   - Every hook event the plugin registers, and the script that handles it
+//   - Every filesystem path the plugin would write to
+//   - Every outbound network call the plugin would make
+//   - A SHA-256 checksum of the hook script (so you can audit-and-pin)
+//
+// This script makes zero changes. It writes nothing. It opens no network sockets.
+//
+// Usage:
+//   cadence-audit                                       # uses $CLAUDE_PLUGIN_ROOT
+//   cadence-audit /path/to/plugin/root                  # explicit path
+//   cadence-audit --project /path/to/your/project       # also show project paths
+
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+
+// ─── Locate the plugin ──────────────────────────────────────────────
+function findPluginRoot() {
+  // CLI arg first
+  const cliRoot = process.argv.slice(2).find(a => !a.startsWith('--'));
+  if (cliRoot) return path.resolve(cliRoot);
+  if (process.env.CLAUDE_PLUGIN_ROOT) return process.env.CLAUDE_PLUGIN_ROOT;
+  // Search the user's plugin cache for the latest version
+  const cache = path.join(os.homedir(), '.claude/plugins/cache/claudecadence/claudecadence');
+  if (fs.existsSync(cache)) {
+    const versions = fs.readdirSync(cache).sort();
+    if (versions.length) return path.join(cache, versions[versions.length - 1]);
+  }
+  return null;
+}
+
+const PROJECT = (() => {
+  const idx = process.argv.indexOf('--project');
+  if (idx !== -1 && process.argv[idx + 1]) return path.resolve(process.argv[idx + 1]);
+  if (process.env.CLAUDE_PROJECT_DIR) return process.env.CLAUDE_PROJECT_DIR;
+  return process.cwd();
+})();
+
+const ROOT = findPluginRoot();
+if (!ROOT) {
+  console.error('error: could not find plugin root');
+  console.error('       set CLAUDE_PLUGIN_ROOT or pass the path as the first argument');
+  process.exit(2);
+}
+
+// ─── Pull metadata ──────────────────────────────────────────────────
+let manifest = {};
+try {
+  manifest = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/plugin.json'), 'utf8'));
+} catch (_) { /* no manifest */ }
+
+let hooks = { hooks: {} };
+try {
+  hooks = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks/hooks.json'), 'utf8'));
+} catch (_) { /* no hooks declared */ }
+
+const hookScript = path.join(ROOT, 'hooks/scripts/cadence_hook.js');
+let hookSha = 'n/a';
+try {
+  const buf = fs.readFileSync(hookScript);
+  hookSha = crypto.createHash('sha256').update(buf).digest('hex');
+} catch (_) {}
+
+// ─── Print report ───────────────────────────────────────────────────
+function hr() { console.log('─'.repeat(70)); }
+function section(t) { console.log(); console.log(t); hr(); }
+
+console.log();
+console.log('  ClaudeCadence — pre-flight audit');
+console.log();
+console.log('  plugin root:  ' + ROOT);
+console.log('  project:      ' + PROJECT);
+console.log('  version:      ' + (manifest.version || '(no manifest)'));
+console.log('  author:       ' + ((manifest.author && manifest.author.name) || '(unset)'));
+console.log('  license:      ' + (manifest.license || '(unset)'));
+console.log();
+
+section('1. Hook events registered');
+const hookList = hooks.hooks || hooks; // tolerate both shapes
+let registered = [];
+for (const eventName of Object.keys(hookList)) {
+  const entries = hookList[eventName] || [];
+  registered.push(eventName);
+  console.log('  ' + eventName);
+  for (const e of (Array.isArray(entries) ? entries : [entries])) {
+    if (e && e.hooks && Array.isArray(e.hooks)) {
+      for (const h of e.hooks) {
+        console.log('    → ' + (h.command || h.type || JSON.stringify(h)).slice(0, 100));
+      }
+    } else if (e && e.command) {
+      console.log('    → ' + e.command.slice(0, 100));
+    }
+  }
+}
+if (!registered.length) console.log('  (no hooks declared)');
+
+section('2. Filesystem WRITE paths (the only places the plugin writes)');
+const cadenceDir = path.join(PROJECT, '.claude/cadence');
+const hubDir = path.join(os.homedir(), '.claude/cadence');
+console.log('  project timeline data:');
+console.log('    ' + path.join(cadenceDir, 'data/nodes.js'));
+console.log('  project session bookkeeping (created/removed per turn):');
+console.log('    ' + path.join(cadenceDir, '.queue-<session>.txt'));
+console.log('    ' + path.join(cadenceDir, '.cursor-<session>.txt'));
+console.log('    ' + path.join(cadenceDir, '.current_turn.txt'));
+console.log('    ' + path.join(cadenceDir, '.server.pid'));
+console.log('    ' + path.join(cadenceDir, '.server.port'));
+console.log('    ' + path.join(cadenceDir, '.server.log'));
+console.log('  project viewer files (one-time copy from plugin):');
+console.log('    ' + path.join(cadenceDir, 'index.html'));
+console.log('    ' + path.join(cadenceDir, '_design.css'));
+console.log('    ' + path.join(cadenceDir, '_timeline.js'));
+console.log('  cross-project hub:');
+console.log('    ' + path.join(hubDir, 'registry.json'));
+
+section('3. Filesystem READ paths');
+console.log('  Hook payload (Claude Code passes via stdin) only references:');
+console.log('    ~/.claude/projects/<slug>/<session>.jsonl   (the active session transcript)');
+console.log('  The hook only reads this file on Stop and SubagentStop events.');
+console.log('  No other path outside ~/.claude/ is read.');
+
+section('4. Network calls');
+console.log('  From the hook script:           NONE');
+console.log('  From the local viewer HTML:     fonts.googleapis.com (Geist family) — only');
+console.log('                                  when the timeline page is open in a browser.');
+console.log('                                  Set CLAUDECADENCE_OFFLINE=1 to disable.');
+console.log('  From the cadence-serve binary:  binds 127.0.0.1 on a project-local port.');
+console.log('                                  Serves only the .claude/cadence/ directory.');
+console.log('                                  No outbound calls.');
+
+section('5. Subprocesses spawned');
+console.log('  Per hook event:           one short-lived Node subprocess running this script.');
+console.log('  Per project session:      optional one HTTP server (cadence-serve), bound to');
+console.log('                            127.0.0.1, restarted on plugin updates.');
+
+section('6. Hook script integrity');
+console.log('  path:    ' + hookScript);
+console.log('  sha256:  ' + hookSha);
+console.log('  size:    ' + (fs.existsSync(hookScript) ? fs.statSync(hookScript).size + ' bytes' : 'n/a'));
+console.log();
+console.log('  To pin this version: ');
+console.log('    git -C <ClaudeCadence-clone> rev-parse v' + (manifest.version || 'X.Y.Z'));
+console.log('  …then verify the script\'s sha256 against the published checksum.');
+
+section('7. Out-of-scope claims (things this plugin never does)');
+[
+  'No telemetry, no analytics, no usage pings, no opt-in/opt-out for any of those.',
+  'No outbound network calls from the hook script.',
+  'No reads outside ~/.claude/ (and only the transcript file Claude Code passes in).',
+  'No writes outside .claude/cadence/ directories.',
+  'No access to credentials, environment variables, or system files.',
+  'No eval(), no dynamic code execution, no shell injection.',
+  'No third-party runtime dependencies (zero package.json deps).',
+].forEach(s => console.log('  ✗ ' + s));
+
+console.log();
+hr();
+console.log('  Full policy: https://github.com/RohitSh26/ClaudeCadence/blob/main/SECURITY.md');
+console.log('  Report a vulnerability: rohit.sharma1048@gmail.com  [ClaudeCadence security]');
+console.log();

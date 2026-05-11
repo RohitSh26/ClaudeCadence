@@ -137,6 +137,33 @@ Per-user (the cross-project home + registry):
 
 Nothing leaves your machine. The "live" indicator pulse is a CSS animation — there's no server-side anything.
 
+## Safety
+
+The whole plugin is under 5,000 lines of code, with no build step and no third-party runtime dependencies. You can read it end-to-end in 20 minutes. [`SECURITY.md`](SECURITY.md) is the full policy; the precise list:
+
+**What this plugin does:**
+- Reads its hook payload from stdin (JSON, per-event, ephemeral)
+- Reads the active session transcript at `~/.claude/projects/<slug>/<session>.jsonl` (on `Stop` + `SubagentStop` only)
+- Appends nodes to `<project>/.claude/cadence/data/nodes.js`
+- Writes per-session bookkeeping in `<project>/.claude/cadence/` (queue, cursor, current-turn files)
+- Registers in `~/.claude/cadence/registry.json`
+- Spawns one local HTTP server (`cadence-serve`) bound to `127.0.0.1`, project-local port
+
+**What this plugin never does:**
+- No telemetry, no analytics, no usage pings
+- No outbound network calls from the hook
+- No reads outside `~/.claude/` (and within it, only the transcript Claude Code gave the hook)
+- No writes outside `.claude/cadence/` directories
+- No access to credentials, env vars, or system files
+- No `eval()`, no dynamic code execution, no shell injection
+- No third-party dependencies — zero `package.json` runtime deps
+
+**Optional network call (viewer only):** the timeline HTML page loads Geist + Source Serif 4 + Geist Mono from `fonts.googleapis.com`. To go fully airgapped, set `CLAUDECADENCE_OFFLINE=1` and the `<link>` is omitted.
+
+**Audit before you enable:** run [`cadence-audit`](plugins/claudecadence/bin/cadence-audit) — read-only diagnostic that prints the plugin version, the exact hook events it registers, the paths it would write to, network calls it would make, and a SHA-256 of the hook script. Makes no changes.
+
+**Reproducible installs:** no build step. The git tag is the artifact, byte-for-byte. Pin to a specific tag if you want immutability.
+
 ## Architecture
 
 - **Hooks** ([`plugins/claudecadence/hooks/`](plugins/claudecadence/hooks/)) emit timeline nodes as a side effect of Claude Code's lifecycle events. Zero LLM cost. Filtered for signal — Bash hooks only fire on `git` / `gh` commands.

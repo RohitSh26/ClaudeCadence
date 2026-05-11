@@ -177,6 +177,23 @@ function serveFile(res, fpath) {
       res.end('Not found');
       return;
     }
+    // Offline mode: when CLAUDECADENCE_OFFLINE=1, rewrite served HTML so the
+    // boot script sees data-offline="1" on <html> and skips the Google Fonts
+    // fetch. Pure on-the-fly substitution; the file on disk is unchanged.
+    if (process.env.CLAUDECADENCE_OFFLINE === '1' && /\.html?$/i.test(fpath)) {
+      fs.readFile(fpath, 'utf8', (rerr, body) => {
+        if (rerr) { res.writeHead(500); res.end('error'); return; }
+        const rewritten = body.replace(/<html\b([^>]*)>/i, (m, attrs) =>
+          /data-offline=/i.test(attrs) ? m : '<html' + attrs + ' data-offline="1">');
+        const buf = Buffer.from(rewritten, 'utf8');
+        res.writeHead(200, Object.assign({
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Length': buf.length,
+        }, noCacheHeaders()));
+        res.end(buf);
+      });
+      return;
+    }
     const headers = Object.assign({
       'Content-Type': mimeFor(fpath),
       'Content-Length': st.size,

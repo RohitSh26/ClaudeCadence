@@ -15,13 +15,38 @@
   })();
 </script>
 <script>
+  // Offline mode — three sources, any one wins:
+  //   1. <html data-offline="1"> (set by cadence-serve when env CLAUDECADENCE_OFFLINE=1)
+  //   2. ?offline=1 query parameter
+  //   3. localStorage.cadence_offline === '1'
+  // When set, the viewer skips its single outbound network call (Google Fonts CDN)
+  // and falls back to system fonts.
+  (function () {
+    var q = false;
+    try { q = new URLSearchParams(window.location.search).has('offline'); } catch (_) {}
+    var ls = false;
+    try { ls = localStorage.getItem('cadence_offline') === '1'; } catch (_) {}
+    var attr = document.documentElement.getAttribute('data-offline') === '1';
+    if (q || ls || attr) {
+      try { localStorage.setItem('cadence_offline', '1'); } catch (_) {}
+      window.__CADENCE_OFFLINE__ = true;
+    }
+  })();
+</script>
+<script>
   // Cache-bust CSS so a stale browser cache never traps the user on an old
   // viewer. (no-cache headers on the server are not always honoured by Safari.)
   document.write('<link rel="stylesheet" href="_design.css?v=' + Date.now() + '">');
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">
+<script>
+  // Google Fonts — the viewer's only outbound network call. Skipped when
+  // offline mode is engaged.
+  if (!window.__CADENCE_OFFLINE__) {
+    document.write('<link rel="preconnect" href="https://fonts.googleapis.com">');
+    document.write('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>');
+    document.write('<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">');
+  }
+</script>
 <style>
   .empty {
     padding: 80px 20px;
