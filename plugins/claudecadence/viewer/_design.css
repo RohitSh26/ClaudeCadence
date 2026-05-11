@@ -3315,3 +3315,30 @@ body { line-height: 1.65; }
   .dispatch-head { flex-wrap: wrap; }
   .dispatch-title { width: 100%; flex: 0 0 100%; }
 }
+
+/* v2.0.1: dispatch-count badge in the turn-strip. Visible even when the
+   turn is collapsed so dispatch groups are findable at a glance. */
+.turn-strip .dispatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--apricot-100);
+  color: var(--apricot-700);
+  border: 1px solid var(--apricot-500);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+[data-theme="dark"] .turn-strip .dispatch-badge { color: var(--apricot-700); }
+
+/* The turn card itself gets a subtle apricot accent at the rail when it
+   contains paired dispatches — easy to spot in the timeline. */
+.turn-card.has-dispatch {
+  border-color: var(--apricot-500);
+}
+.turn-card.has-dispatch + .turn .rail .marker.is-filled,
+.turn.has-dispatch .rail .marker.is-filled { background: var(--apricot-500); }

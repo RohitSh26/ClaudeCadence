@@ -1304,6 +1304,14 @@
     card.dataset.status = (turn.prompt ? turn.prompt.status : (turn.children[0] && turn.children[0].status) || 'completed');
     // Default open if it's the latest turn (no response = in progress).
     if (!turn.response) card.open = true;
+    // v2.0: also auto-open turns that contain paired fork+merge dispatch
+    // groups, so the iter6 dispatch-group visual is immediately visible.
+    const turnDispatchGroups = collectDispatchGroups(turn.children || []);
+    if (turnDispatchGroups.length) {
+      card.open = true;
+      card.classList.add('has-dispatch');
+      li.dataset.dispatchCount = turnDispatchGroups.length;
+    }
 
     const sum = document.createElement('summary');
     sum.appendChild(el('span','lane-mark'));
@@ -1345,7 +1353,19 @@
       const strip = el('div','turn-strip');
       const activity = turnSummary(turn);
       const respPreview = turn.response ? `<span class="resp-preview">↪ ${escapeHtml(turn.response.summary || turn.response.title || '')}</span>` : '';
-      strip.innerHTML = (activity || '') + (activity && respPreview ? ' · ' : '') + respPreview;
+      // v2.0: dispatch-group count badge if this turn contains any.
+      let dispatchBadge = '';
+      if (turnDispatchGroups.length) {
+        const names = [...new Set(turnDispatchGroups.map(g => g.subagentName))].slice(0, 3).join(', ');
+        dispatchBadge =
+          '<span class="dispatch-badge" title="paired fork+merge dispatch groups">' +
+          '🔀 ' + turnDispatchGroups.length + ' subagent ' +
+          (turnDispatchGroups.length === 1 ? 'dispatch' : 'dispatches') +
+          (names ? ' · ' + escapeHtml(names) : '') +
+          '</span>';
+      }
+      strip.innerHTML = dispatchBadge + (dispatchBadge && (activity || respPreview) ? ' · ' : '') +
+                       (activity || '') + (activity && respPreview ? ' · ' : '') + respPreview;
       sum.parentNode.insertBefore(strip, sum.nextSibling);
     }
 
