@@ -2,12 +2,15 @@
 
 > See the rhythm of your multi-agent Claude Code sessions.
 
-<table>
-  <tr>
-    <td align="center"><img alt="Light theme" src="docs/img/timeline-light.svg" width="600"><br><sub>Light</sub></td>
-    <td align="center"><img alt="Dark theme" src="docs/img/timeline-dark.svg" width="600"><br><sub>Dark</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <img alt="ClaudeCadence timeline — dark theme" src="docs/img/timeline-dark.svg" width="100%">
+  <br><sub><em>Dark · sage on charcoal</em></sub>
+</p>
+
+<p align="center">
+  <img alt="ClaudeCadence timeline — light theme" src="docs/img/timeline-light.svg" width="100%">
+  <br><sub><em>Light · apricot on bone</em></sub>
+</p>
 
 ClaudeCadence is a Claude Code plugin that gives you a **live HTML timeline** of your sessions — every tool call, every sub-agent fork, every PR opened, every decision made — rendered as an expandable, filterable, fork-aware vertical timeline you open in your browser.
 
