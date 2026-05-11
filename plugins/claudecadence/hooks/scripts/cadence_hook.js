@@ -765,24 +765,32 @@ function descendantsOfPrompt(graph, rootUuid, stopAtUuids) {
 }
 
 // Index existing nodes for dedup AND turn_id linkage. Returns:
-//   uuidSet:   Set<source_uuid>          — strict match for new-style nodes
-//   keyMap:    Map<contentKey, [{ts,turn_id}]> — fuzzy match for legacy nodes;
-//                turn_id lets a derived response link to an existing UPS-fired
-//                prompt's turn so they group correctly in the timeline UI.
+//   uuidSet:    Set<source_uuid>          — strict match for new-style nodes
+//   keyMap:     Map<contentKey, [{ts,turn_id}]> — fuzzy match for legacy nodes;
+//                 turn_id lets a derived response link to an existing UPS-fired
+//                 prompt's turn so they group correctly in the timeline UI.
+//   respByTid:  Set<turn_id> — turn_ids that already have a response node.
+//                 Prevents emitting a second response for a growing cluster
+//                 (orchestrator turns where the last-assistant uuid changes
+//                 between derivation passes).
 function indexExistingNodes(nodes) {
   const uuidSet = new Set();
   const keyMap = new Map();
+  const respByTid = new Set();
   for (const n of nodes) {
     if (n.source_uuid) uuidSet.add(n.source_uuid);
     const tags = n.tags || [];
-    if (tags.indexOf('prompt') === -1 && tags.indexOf('response') === -1) continue;
+    const isPrompt = tags.indexOf('prompt') !== -1;
+    const isResponse = tags.indexOf('response') !== -1;
+    if (!isPrompt && !isResponse) continue;
+    if (isResponse && n.turn_id) respByTid.add(n.turn_id);
     const text = (n.title || '') + '|' + (n.summary || '').slice(0, 100);
-    const k = (tags.indexOf('prompt') !== -1 ? 'P:' : 'R:') + text;
+    const k = (isPrompt ? 'P:' : 'R:') + text;
     let arr = keyMap.get(k);
     if (!arr) { arr = []; keyMap.set(k, arr); }
     arr.push({ ts: n.ts || '', turn_id: n.turn_id || null });
   }
-  return { uuidSet, keyMap };
+  return { uuidSet, keyMap, respByTid };
 }
 
 // Within ±5 seconds is "the same node" for legacy fuzzy match.
@@ -872,7 +880,14 @@ function deriveCatchUpNodes(transcriptPath, session) {
       });
     }
 
-    // Response node = joined assistant text from descendants
+    // Response node = joined assistant text from descendants.
+    //
+    // One response per prompt. If the prompt's turn_id already has a response
+    // node (UPS-Stop or earlier graph derivation), skip — this prevents a
+    // growing in-flight orchestrator cluster from emitting a fresh response
+    // each time it gets bigger between SubagentStop fires.
+    if (idx.respByTid.has(turnId)) continue;
+
     const desc = descendantsOfPrompt(graph, prompt.uuid, promptUuids);
     const asstSorted = desc
       .filter(o => (o.type || o.role) === 'assistant')
@@ -882,25 +897,28 @@ function deriveCatchUpNodes(transcriptPath, session) {
     const rtext = asstSorted.map(extractAssistantText).filter(Boolean).join('\n');
     if (!rtext) continue;
     const lastAsst = asstSorted[asstSorted.length - 1];
-    const respUuid = lastAsst.uuid;  // last assistant entry's uuid identifies the response
+    const respUuid = lastAsst.uuid;
     const rts = lastAsst.timestamp || lastAsst.ts || pts;
     const { title: rtitle, summary: rsummary } = makeTitleAndSummary(rtext, 'Claude responded');
 
-    if (!isAlreadyCaptured(idx, respUuid, 'response', rtitle, rsummary, rts)) {
-      out.push({
-        agent: 'orchestrator',
-        kind: 'response',
-        status: 'completed',
-        title: rtitle,
-        summary: rsummary,
-        tags: ['response', 'graph'],
-        session,
-        turn_id: turnId,
-        ts: rts,
-        source_uuid: respUuid,
-        blocks: [{ type: 'markdown', value: rtext.slice(0, 200000) }],
-      });
-    }
+    if (isAlreadyCaptured(idx, respUuid, 'response', rtitle, rsummary, rts)) continue;
+
+    out.push({
+      agent: 'orchestrator',
+      kind: 'response',
+      status: 'completed',
+      title: rtitle,
+      summary: rsummary,
+      tags: ['response', 'graph'],
+      session,
+      turn_id: turnId,
+      ts: rts,
+      source_uuid: respUuid,
+      blocks: [{ type: 'markdown', value: rtext.slice(0, 200000) }],
+    });
+    // Mark this turn as having a response so subsequent prompts in this same
+    // pass don't see it as available either.
+    idx.respByTid.add(turnId);
   }
 
   return out;
