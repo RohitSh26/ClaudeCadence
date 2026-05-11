@@ -401,12 +401,6 @@ function handleUserPrompt(payload) {
       latestAssistantTs(payload.transcript_path) || ''
     );
   } catch (_) {}
-  // Advance the prompt cursor past this just-fired UPS prompt so the catch-up
-  // scan in Stop/SubagentStop won't synthesize a duplicate of it.
-  try {
-    const latestPromptTs = latestUserPromptTs(payload.transcript_path);
-    if (latestPromptTs) writePromptCursor(session, latestPromptTs);
-  } catch (_) {}
   const isSlash = prompt.startsWith('/');
   const titleLine = prompt.split('\n', 1)[0];
   const title = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : titleLine;
@@ -570,10 +564,7 @@ function handlePostToolUse(payload) {
 function handleSubagentStop(payload) {
   const session = sessionIdOf(payload);
   const sub = payload.subagent_type || payload.agent_type || payload.agent || 'subagent';
-  // Catch up any user prompts that bypassed UPS (orchestrator/remote-control).
-  // Synthetic nodes come first so they appear before the merge in the timeline.
-  const synthesized = catchUpUserPrompts(payload.transcript_path, session);
-  const mergeNode = {
+  const merge = {
     agent: String(sub),
     kind: 'merge',
     status: 'completed',
@@ -582,7 +573,12 @@ function handleSubagentStop(payload) {
     tags: ['subagent', 'stop', String(sub)],
     session,
   };
-  return synthesized.length ? synthesized.concat([mergeNode]) : mergeNode;
+  // Recover any prompts/responses that bypassed UPS/Stop in this session
+  // (orchestrator pattern). Idempotent — dedup ensures no double-emission.
+  let derived = [];
+  try { derived = deriveCatchUpNodes(payload.transcript_path, session); }
+  catch (exc) { logErr(`graph derivation failed: ${exc && exc.message || exc}`); }
+  return derived.length ? derived.concat([merge]) : merge;
 }
 
 function extractAssistantText(obj) {
@@ -687,116 +683,229 @@ function writeCursor(session, ts) {
   try { fs.writeFileSync(cursorFile(session), String(ts)); } catch (_) {}
 }
 
-// ─── User-prompt catch-up (orchestrator + dropped-UPS recovery) ──────────
+// ─── Graph-derived prompt+response capture ────────────────────────────────
+//
 // In normal Claude Code sessions, UserPromptSubmit fires for every human
-// prompt. But in orchestrator/remote-control sessions, Claude is mid-turn
-// when the user injects a new prompt; UPS doesn't fire and the prompt is
-// invisible to Cadence even though it's sitting in the transcript.
+// prompt and Stop fires for every Claude turn. But in orchestrator /
+// remote-control sessions, prompts get injected mid-turn, UPS doesn't fire,
+// and Stop never closes the outer turn — only SubagentStop fires. The whole
+// conversation goes invisible to Cadence even though Claude Code is
+// processing it locally.
 //
-// On every Stop and SubagentStop, we scan the transcript for plain-string
-// user entries past the prompt cursor that aren't system injections and
-// haven't been captured as nodes yet. Each one becomes a synthetic prompt
-// node tagged 'synthesized'. The cursor advances so we don't re-emit them.
+// The fix: treat the transcript as the parent-child graph it actually is.
+// Every entry has a `parentUuid` pointing to the entry it descends from.
+// A "real human prompt" is the root of a work cluster — all descendant
+// assistant entries (bounded by the next real prompt's uuid) form Claude's
+// response to it. We derive prompt + response timeline nodes from this
+// structure, with strict dedup against existing nodes.
 //
-// UPS itself advances the cursor in handleUserPrompt, so normally the scan
-// finds nothing new and is a cheap no-op. The cost is only paid when there's
-// actually a missed prompt to recover.
+// Dedup strategy:
+//   1. Source-uuid match (authoritative): if any existing node carries
+//      source_uuid === candidate.source_uuid, skip.
+//   2. Content+ts-window match (legacy): for nodes that pre-date this code
+//      (no source_uuid), match by first-150-char text + ts within ±5s.
+//      Catches UPS-fired prompts so we don't double-emit them.
+//
+// This survives: UPS-before-transcript-flush race, hook re-runs across
+// version changes, missed UPS events (orchestrator), missed Stop events
+// (orchestrator). Idempotent — running twice on the same transcript
+// produces the same nodes.
 
-function promptCursorFile(session) { return path.join(CADENCE_DIR, `.prompt-cursor-${session}.txt`); }
-function readPromptCursor(session) {
-  try { return fs.readFileSync(promptCursorFile(session), 'utf8').trim() || null; }
-  catch (_) { return null; }
-}
-function writePromptCursor(session, ts) {
-  try { fs.writeFileSync(promptCursorFile(session), String(ts)); } catch (_) {}
+const SYSTEM_INJECTION_RE = /^<+(task-notification|system-reminder|local-command-|command-name|command-message|command-args|command-stdout|command-stderr|autonomous-loop)/;
+
+// Real human prompt: user-string content not starting with a known injection
+// marker. Plain-text user entries are real prompts (verified across normal,
+// orchestrator, and AutoMode transcripts; even paste-from-terminal counts).
+function isRealUserPromptEntry(o) {
+  if ((o.type || o.role) !== 'user') return false;
+  const c = o.message && o.message.content;
+  if (typeof c !== 'string') return false;
+  const head = c.trimStart();
+  if (!head) return false;
+  if (head.startsWith('<') && SYSTEM_INJECTION_RE.test(head)) return false;
+  return true;
 }
 
-// Claude Code injects synthetic user-string entries (system reminders, slash
-// command stubs, command stdout). These look like user prompts to the
-// transcript but aren't human input.
-function isSystemInjection(text) {
-  if (!text) return true;
-  const head = text.trimStart();
-  return /^<(system-reminder|local-command-|command-name|command-message|command-args|command-stdout|command-stderr)/.test(head);
-}
-
-// Latest user-prompt TEXT timestamp in the transcript right now (or null).
-// Used to advance the prompt cursor when UPS fires normally.
-function latestUserPromptTs(transcriptPath) {
+function buildTranscriptGraph(transcriptPath) {
   if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
   let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
-  let latest = null;
+  const entries = [];
+  const byUuid = new Map();
+  const childrenOf = new Map();
   for (const ln of raw.split('\n')) {
     const t = ln.trim(); if (!t) continue;
     let o; try { o = JSON.parse(t); } catch (_) { continue; }
-    if ((o.type || o.role) !== 'user') continue;
-    const c = o.message && o.message.content;
-    if (typeof c !== 'string') continue;
-    if (isSystemInjection(c)) continue;
-    const ts = o.timestamp || o.ts || null;
-    if (ts && (!latest || ts > latest)) latest = ts;
+    if (!o.uuid) continue;
+    entries.push(o);
+    byUuid.set(o.uuid, o);
+    if (o.parentUuid) {
+      let arr = childrenOf.get(o.parentUuid);
+      if (!arr) { arr = []; childrenOf.set(o.parentUuid, arr); }
+      arr.push(o.uuid);
+    }
   }
-  return latest;
+  return { entries, byUuid, childrenOf };
 }
 
-// Scan transcript for human user prompts past the prompt cursor that haven't
-// been captured. Returns array of synthetic prompt nodes (possibly empty).
-// On first run for a session (no cursor), seeds the cursor to the latest user
-// prompt ts so we don't backfill an entire pre-existing session as duplicates.
-function catchUpUserPrompts(transcriptPath, session) {
-  if (!transcriptPath || !fs.existsSync(transcriptPath)) return [];
-  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return []; }
-
-  const cursor = readPromptCursor(session);
-
-  // First-run seed: if no cursor exists, snap to "now" — don't synthesize the
-  // entire transcript history as duplicates of nodes that may already exist.
-  if (!cursor) {
-    const latest = latestUserPromptTs(transcriptPath);
-    if (latest) writePromptCursor(session, latest);
-    return [];
+// BFS descendants of a root, stopping at any uuid in stopAt (sibling prompts).
+function descendantsOfPrompt(graph, rootUuid, stopAtUuids) {
+  const visited = new Set();
+  const queue = [rootUuid];
+  while (queue.length) {
+    const u = queue.shift();
+    if (visited.has(u)) continue;
+    visited.add(u);
+    for (const c of (graph.childrenOf.get(u) || [])) {
+      if (stopAtUuids.has(c)) continue;
+      queue.push(c);
+    }
   }
-
-  const nodes = [];
-  let latestTs = cursor;
-  for (const ln of raw.split('\n')) {
-    const t = ln.trim(); if (!t) continue;
-    let o; try { o = JSON.parse(t); } catch (_) { continue; }
-    if ((o.type || o.role) !== 'user') continue;
-    const c = o.message && o.message.content;
-    if (typeof c !== 'string') continue;
-    if (isSystemInjection(c)) continue;
-    const ts = o.timestamp || o.ts || null;
-    if (!ts || ts <= cursor) continue;
-
-    const prompt = c.trim();
-    if (!prompt) continue;
-
-    const tid = beginTurn();
-    const titleLine = prompt.split('\n', 1)[0];
-    const title = titleLine.length > 96 ? titleLine.slice(0, 96) + '…' : titleLine;
-    let summary = prompt.slice(0, 160).replace(/\n/g, ' ').trim();
-    if (prompt.length > 160) summary += '…';
-    const isSlash = prompt.startsWith('/');
-
-    nodes.push({
-      agent: 'founder',
-      kind: isSlash ? 'decision' : 'response',
-      status: 'completed',
-      title,
-      summary,
-      tags: ['prompt', 'synthesized'].concat(isSlash ? ['slash'] : []),
-      session,
-      turn_id: tid,
-      ts,
-      blocks: [{ type: 'markdown', value: prompt.slice(0, 200000) }],
-    });
-    if (ts > latestTs) latestTs = ts;
-  }
-
-  if (latestTs !== cursor) writePromptCursor(session, latestTs);
-  return nodes;
+  visited.delete(rootUuid);
+  return [...visited].map(u => graph.byUuid.get(u)).filter(Boolean);
 }
+
+// Index existing nodes for dedup AND turn_id linkage. Returns:
+//   uuidSet:   Set<source_uuid>          — strict match for new-style nodes
+//   keyMap:    Map<contentKey, [{ts,turn_id}]> — fuzzy match for legacy nodes;
+//                turn_id lets a derived response link to an existing UPS-fired
+//                prompt's turn so they group correctly in the timeline UI.
+function indexExistingNodes(nodes) {
+  const uuidSet = new Set();
+  const keyMap = new Map();
+  for (const n of nodes) {
+    if (n.source_uuid) uuidSet.add(n.source_uuid);
+    const tags = n.tags || [];
+    if (tags.indexOf('prompt') === -1 && tags.indexOf('response') === -1) continue;
+    const text = (n.title || '') + '|' + (n.summary || '').slice(0, 100);
+    const k = (tags.indexOf('prompt') !== -1 ? 'P:' : 'R:') + text;
+    let arr = keyMap.get(k);
+    if (!arr) { arr = []; keyMap.set(k, arr); }
+    arr.push({ ts: n.ts || '', turn_id: n.turn_id || null });
+  }
+  return { uuidSet, keyMap };
+}
+
+// Within ±5 seconds is "the same node" for legacy fuzzy match.
+function tsWithinWindow(a, b, windowMs) {
+  if (!a || !b) return false;
+  const da = Date.parse(a), db = Date.parse(b);
+  if (Number.isNaN(da) || Number.isNaN(db)) return false;
+  return Math.abs(da - db) <= windowMs;
+}
+
+function isAlreadyCaptured(idx, sourceUuid, kind, title, summary, ts) {
+  if (sourceUuid && idx.uuidSet.has(sourceUuid)) return true;
+  const text = (title || '') + '|' + (summary || '').slice(0, 100);
+  const k = (kind === 'prompt' ? 'P:' : 'R:') + text;
+  const list = idx.keyMap.get(k);
+  if (!list) return false;
+  for (const e of list) {
+    if (tsWithinWindow(e.ts, ts, 5000)) return true;
+  }
+  return false;
+}
+
+// Look up an existing prompt node's turn_id by content+ts. Used so a derived
+// response for a UPS-already-captured prompt links to the original prompt's
+// turn_id rather than getting a fresh uuid-derived one (which would orphan it
+// in the timeline UI).
+function findExistingPromptTurnId(idx, title, summary, ts) {
+  const text = (title || '') + '|' + (summary || '').slice(0, 100);
+  const list = idx.keyMap.get('P:' + text);
+  if (!list) return null;
+  for (const e of list) {
+    if (tsWithinWindow(e.ts, ts, 5000) && e.turn_id) return e.turn_id;
+  }
+  return null;
+}
+
+function makeTitleAndSummary(text, fallbackTitle) {
+  const firstLine = text.split('\n', 1)[0].trim();
+  const title = firstLine.length > 96
+    ? firstLine.slice(0, 96) + '…'
+    : (firstLine || fallbackTitle);
+  let summary = text.slice(0, 160).replace(/\n/g, ' ').trim();
+  if (text.length > 160) summary += '…';
+  return { title, summary };
+}
+
+// Derive timeline nodes from the transcript graph, deduplicated against
+// existing nodes.js. Returns array of nodes ready to append.
+function deriveCatchUpNodes(transcriptPath, session) {
+  const graph = buildTranscriptGraph(transcriptPath);
+  if (!graph) return [];
+
+  const realPrompts = graph.entries.filter(isRealUserPromptEntry);
+  if (!realPrompts.length) return [];
+  const promptUuids = new Set(realPrompts.map(p => p.uuid));
+
+  const idx = indexExistingNodes(loadNodes());
+  const out = [];
+
+  for (const prompt of realPrompts) {
+    const ptext = (prompt.message.content || '').trim();
+    if (!ptext) continue;
+    const pts = prompt.timestamp || prompt.ts || null;
+    const { title: ptitle, summary: psummary } = makeTitleAndSummary(ptext, 'User prompt');
+
+    // turn_id linkage: if this prompt was already captured by UPS, reuse the
+    // existing prompt's turn_id so the derived response groups under it in
+    // the UI. Otherwise mint a new uuid-derived turn_id.
+    const existingTid = findExistingPromptTurnId(idx, ptitle, psummary, pts);
+    const turnId = existingTid || ('t_' + prompt.uuid.replace(/-/g, '').slice(0, 10));
+
+    // Prompt node
+    if (!isAlreadyCaptured(idx, prompt.uuid, 'prompt', ptitle, psummary, pts)) {
+      const isSlash = ptext.startsWith('/');
+      out.push({
+        agent: 'founder',
+        kind: isSlash ? 'decision' : 'response',
+        status: 'completed',
+        title: ptitle,
+        summary: psummary,
+        tags: ['prompt', 'graph'].concat(isSlash ? ['slash'] : []),
+        session,
+        turn_id: turnId,
+        ts: pts,
+        source_uuid: prompt.uuid,
+        blocks: [{ type: 'markdown', value: ptext.slice(0, 200000) }],
+      });
+    }
+
+    // Response node = joined assistant text from descendants
+    const desc = descendantsOfPrompt(graph, prompt.uuid, promptUuids);
+    const asstSorted = desc
+      .filter(o => (o.type || o.role) === 'assistant')
+      .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+    if (!asstSorted.length) continue;
+
+    const rtext = asstSorted.map(extractAssistantText).filter(Boolean).join('\n');
+    if (!rtext) continue;
+    const lastAsst = asstSorted[asstSorted.length - 1];
+    const respUuid = lastAsst.uuid;  // last assistant entry's uuid identifies the response
+    const rts = lastAsst.timestamp || lastAsst.ts || pts;
+    const { title: rtitle, summary: rsummary } = makeTitleAndSummary(rtext, 'Claude responded');
+
+    if (!isAlreadyCaptured(idx, respUuid, 'response', rtitle, rsummary, rts)) {
+      out.push({
+        agent: 'orchestrator',
+        kind: 'response',
+        status: 'completed',
+        title: rtitle,
+        summary: rsummary,
+        tags: ['response', 'graph'],
+        session,
+        turn_id: turnId,
+        ts: rts,
+        source_uuid: respUuid,
+        blocks: [{ type: 'markdown', value: rtext.slice(0, 200000) }],
+      });
+    }
+  }
+
+  return out;
+}
+
 
 // Latest assistant TEXT timestamp in the transcript right now (or null).
 function latestAssistantTs(transcriptPath) {
@@ -989,11 +1098,13 @@ function handleStop(payload) {
   }
   if (tid) node.turn_id = tid;
   endTurn();
-  // Catch up any user prompts that bypassed UPS (orchestrator/remote-control,
-  // or a UPS that failed silently). Synthetic prompts come BEFORE the response
-  // so the timeline reads in causal order.
-  const synthesized = catchUpUserPrompts(payload.transcript_path, session);
-  return synthesized.length ? synthesized.concat([node]) : node;
+  // Recover any prompts/responses that bypassed UPS/Stop earlier in this
+  // session (orchestrator pattern, dropped UPS, etc.). Idempotent — dedup
+  // skips anything already captured.
+  let derived = [];
+  try { derived = deriveCatchUpNodes(payload.transcript_path, session); }
+  catch (exc) { logErr(`graph derivation failed: ${exc && exc.message || exc}`); }
+  return derived.length ? derived.concat([node]) : node;
 }
 
 const HANDLERS = {
