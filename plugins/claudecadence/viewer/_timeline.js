@@ -1147,6 +1147,142 @@
     return parts.join(' · ');
   }
 
+  // ─── v2.0: Dispatch-group rendering ───────────────────────────────
+  // Detect paired fork+merge nodes by source_tool_use_id within a turn's
+  // children. Returns an array of { fork, merges[], subagentName } groups.
+  // A group requires AT LEAST a fork. Merge may be missing (in-flight
+  // dispatch). Multiple merges with the same tuid (e.g. PostToolUse +
+  // un-deduped SubagentStop) all get included — the renderer shows them
+  // collapsed.
+  function collectDispatchGroups(children) {
+    if (!children || !children.length) return [];
+    const forks = children.filter(c => c.kind === 'fork' && c.source_tool_use_id);
+    if (!forks.length) return [];
+    const groups = [];
+    for (const f of forks) {
+      const merges = children.filter(c =>
+        c.kind === 'merge' && c.source_tool_use_id === f.source_tool_use_id
+      );
+      const subagentName = merges.length && merges[0].agent
+        ? merges[0].agent
+        : (f.title || '').match(/Dispatched → ([^:]+)/)?.[1]?.trim() || 'subagent';
+      groups.push({
+        fork: f,
+        merges,                              // array (could be 1 PostToolUse + leftover SubagentStop)
+        merge: merges[0] || null,            // preferred one
+        subagentName,
+        tuid: f.source_tool_use_id,
+      });
+    }
+    return groups;
+  }
+
+  // Lane color for a subagent name — uses the same palette as the trunk's
+  // AGENT_LANE table where possible, otherwise picks deterministically.
+  function laneColorFor(subagent) {
+    const known = AGENT_LANE[subagent];
+    if (known) return known;
+    const palette = ['var(--info)', 'var(--success)', 'var(--apricot-600)', 'var(--warning)'];
+    let h = 0; for (const c of subagent) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return palette[h % palette.length];
+  }
+
+  // Render a single dispatch group as the iter6 fork→merge visual.
+  // The structure mirrors mocks/04-fork-merge.html in compact form:
+  //   ┌────────────────────────────────────────────────────────────┐
+  //   │  ▸ dispatch-card (apricot tint)                            │
+  //   ├────────────────────────────────────────────────────────────┤
+  //   │  ╱ fork SVG (1 → 1 here, the one lane that's the subagent) │
+  //   │  │ lane label                                                │
+  //   │  │ (subagent activity — count only for now)                  │
+  //   │  ╲ merge SVG                                                  │
+  //   ├────────────────────────────────────────────────────────────┤
+  //   │  ▸ merge-card (the 22px ringed marker + lane contributions) │
+  //   └────────────────────────────────────────────────────────────┘
+  function renderDispatchGroup(dg) {
+    const wrap = el('div','dispatch-group');
+    wrap.dataset.tuid = dg.tuid || '';
+    wrap.style.setProperty('--lane', laneColorFor(dg.subagentName));
+
+    // ── 1. Dispatch (fork) card ─────────────────────────────────────
+    const forkRow = el('div','dispatch-fork');
+    const forkCard = el('div','dispatch-card');
+    const fhead = el('div','dispatch-head');
+    fhead.innerHTML =
+      '<span class="dispatch-tag">FORK</span>' +
+      '<span class="dispatch-title">' + escapeHtml(dg.fork.title || 'Dispatched → ' + dg.subagentName) + '</span>' +
+      '<span class="dispatch-tuid" title="' + escapeHtml(dg.tuid || '') + '">↔ ' +
+        escapeHtml((dg.tuid || '').slice(-6)) + '</span>' +
+      '<span class="dispatch-time">' + escapeHtml(shortTime(dg.fork.ts)) + '</span>';
+    forkCard.appendChild(fhead);
+    if (dg.fork.summary) {
+      const s = el('p','dispatch-summary'); s.textContent = dg.fork.summary;
+      forkCard.appendChild(s);
+    }
+    forkRow.appendChild(forkCard);
+    wrap.appendChild(forkRow);
+
+    // ── 2. Fork SVG curve to lane ───────────────────────────────────
+    const svg1 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg1.setAttribute('class', 'dispatch-curve dispatch-curve-fork');
+    svg1.setAttribute('viewBox', '0 0 100 36');
+    svg1.setAttribute('preserveAspectRatio', 'none');
+    svg1.innerHTML = '<path d="M2 0 C2 18, 50 18, 50 36" stroke="var(--lane)" stroke-width="1.4" fill="none"/>';
+    wrap.appendChild(svg1);
+
+    // ── 3. Lane label ───────────────────────────────────────────────
+    const laneLabel = el('div','dispatch-lane-label');
+    laneLabel.innerHTML =
+      '<span class="swatch"></span>' +
+      '<span class="name">' + escapeHtml(dg.subagentName) + '</span>' +
+      '<span class="id">' + escapeHtml((dg.tuid || '').slice(-4)) + '</span>';
+    wrap.appendChild(laneLabel);
+
+    // ── 4. Lane body — "subagent ran for Nm" if we have both ends ───
+    if (dg.fork && dg.merge) {
+      const ms = Date.parse(dg.merge.ts) - Date.parse(dg.fork.ts);
+      const elapsed = Number.isFinite(ms) && ms > 0 ? fmtElapsed(ms) : '—';
+      const laneBody = el('div','dispatch-lane-body');
+      laneBody.innerHTML =
+        '<span class="meta">subagent ran for <strong>' + escapeHtml(elapsed) + '</strong></span>';
+      if (dg.merges.length > 1) {
+        laneBody.innerHTML += '  <span class="meta dim">· ' + dg.merges.length +
+          ' merges captured (PostToolUse + SubagentStop)</span>';
+      }
+      wrap.appendChild(laneBody);
+    } else {
+      const laneBody = el('div','dispatch-lane-body');
+      laneBody.innerHTML = '<span class="meta dim">subagent in flight…</span>';
+      wrap.appendChild(laneBody);
+    }
+
+    // ── 5. Merge SVG curve back to trunk ────────────────────────────
+    if (dg.merge) {
+      const svg2 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg2.setAttribute('class', 'dispatch-curve dispatch-curve-merge');
+      svg2.setAttribute('viewBox', '0 0 100 36');
+      svg2.setAttribute('preserveAspectRatio', 'none');
+      svg2.innerHTML = '<path d="M50 0 C50 18, 2 18, 2 36" stroke="var(--lane)" stroke-width="1.4" fill="none"/>';
+      wrap.appendChild(svg2);
+
+      // ── 6. Merge card ────────────────────────────────────────────
+      const mergeCard = el('div','dispatch-merge-card');
+      const mhead = el('div','dispatch-merge-head');
+      mhead.innerHTML =
+        '<span class="merge-tag">MERGE</span>' +
+        '<span class="merge-title">' + escapeHtml(dg.merge.title || (dg.subagentName + ' done')) + '</span>' +
+        '<span class="merge-time">' + escapeHtml(shortTime(dg.merge.ts)) + '</span>';
+      mergeCard.appendChild(mhead);
+      if (dg.merge.summary) {
+        const ms = el('p','merge-summary-text'); ms.textContent = dg.merge.summary;
+        mergeCard.appendChild(ms);
+      }
+      wrap.appendChild(mergeCard);
+    }
+
+    return wrap;
+  }
+
   function renderTurn(turn) {
     const li = el('li','turn');
     if (turn.prompt) {
@@ -1239,9 +1375,26 @@
       const childSection = el('div','turn-section');
       childSection.appendChild(el('div','section-label', `during this turn · ${turn.children.length}`));
 
-      // Bucket children by tool family.
+      // v2.0: detect paired fork+merge by source_tool_use_id and render them
+      // as a dispatch-group block (iter6 visual) BEFORE the regular tool
+      // buckets. Pulled-out nodes are excluded from bucketing below.
+      const dispatchGroups = collectDispatchGroups(turn.children);
+      const usedInDispatch = new Set();
+      for (const dg of dispatchGroups) {
+        if (dg.fork)  usedInDispatch.add(dg.fork.id);
+        if (dg.merge) usedInDispatch.add(dg.merge.id);
+        for (const m of dg.merges) usedInDispatch.add(m.id);
+      }
+      if (dispatchGroups.length) {
+        const dispatchSection = el('div','dispatch-groups');
+        dispatchGroups.forEach(dg => dispatchSection.appendChild(renderDispatchGroup(dg)));
+        childSection.appendChild(dispatchSection);
+      }
+
+      // Bucket remaining children by tool family.
       const buckets = new Map();
       turn.children.forEach(c => {
+        if (usedInDispatch.has(c.id)) return;
         const tool = classifyChild(c);
         if (!buckets.has(tool)) buckets.set(tool, []);
         buckets.get(tool).push(c);

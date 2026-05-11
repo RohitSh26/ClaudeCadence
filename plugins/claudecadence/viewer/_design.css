@@ -3135,3 +3135,183 @@ body { line-height: 1.65; }
 [data-theme="dark"] .filter-strip { background: rgba(14, 17, 22, 0.92); }
 [data-theme="dark"] .card > summary:hover { background: rgba(35, 40, 51, 0.45); }
 [data-theme="dark"] .child-group-body     { background: rgba(35, 40, 51, 0.30); }
+
+/* ──────────────────────────────────────────────────────────────────────
+   v2.0 — Dispatch-group block (iter6 fork→merge visual)
+   Wraps a paired fork+merge from one Agent dispatch into a coherent
+   visual unit: dispatch-card → fork curve → lane label → lane body →
+   merge curve → merge-card. Lane color is set on the wrapping element
+   via --lane (set by JS from the subagent's name).
+   ────────────────────────────────────────────────────────────── */
+.dispatch-group {
+  margin: 14px 0 8px;
+  border-left: 2px solid var(--lane, var(--lane-trunk));
+  padding-left: 14px;
+  position: relative;
+}
+.dispatch-group + .dispatch-group { margin-top: 24px; }
+
+/* — Dispatch (fork) card — */
+.dispatch-fork { margin: 0 0 0; }
+.dispatch-card {
+  background: linear-gradient(180deg, var(--apricot-100) 0%, var(--paper) 100%);
+  border: 1px solid var(--apricot-500);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-1);
+}
+[data-theme="dark"] .dispatch-card {
+  background: linear-gradient(180deg, var(--apricot-100) 0%, var(--paper) 100%);
+}
+.dispatch-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dispatch-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--apricot-100);
+  color: var(--apricot-700);
+  border: 1px solid var(--apricot-500);
+  white-space: nowrap;
+}
+[data-theme="dark"] .dispatch-tag { color: var(--apricot-700); }
+.dispatch-title {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dispatch-tuid {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--apricot-700);
+  background: var(--apricot-100);
+  border: 1px solid var(--apricot-500);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  letter-spacing: 0.02em;
+  cursor: help;
+}
+.dispatch-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mid);
+  white-space: nowrap;
+}
+.dispatch-summary {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--mid);
+  font-family: var(--font-sans);
+}
+
+/* — Curves between fork → lane → merge — */
+.dispatch-curve {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+}
+
+/* — Lane label — */
+.dispatch-lane-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lane, var(--lane-trunk));
+  padding: 4px 10px;
+  background: var(--paper);
+  border: 1px solid var(--soft);
+  border-top: 2px solid var(--lane, var(--lane-trunk));
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.dispatch-lane-label .swatch {
+  width: 8px; height: 8px; border-radius: 2px;
+  background: var(--lane, var(--lane-trunk));
+}
+.dispatch-lane-label .id { color: var(--neutral-400); margin-left: 6px; font-size: 10px; }
+
+/* — Lane body (subagent activity summary) — */
+.dispatch-lane-body {
+  padding: 8px 14px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--mid);
+  border-left: 1px dashed var(--neutral-300);
+  margin-left: 4px;
+}
+.dispatch-lane-body .meta strong { color: var(--ink); font-weight: 500; }
+.dispatch-lane-body .meta.dim    { color: var(--neutral-400); font-style: italic; }
+
+/* — Merge card — */
+.dispatch-merge-card {
+  margin-top: 0;
+  background: var(--paper);
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+.dispatch-merge-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, var(--bone) 0%, var(--paper) 100%);
+  border-bottom: 1px solid var(--soft);
+}
+.dispatch-merge-head .merge-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--mid);
+  border: 1px solid var(--soft);
+}
+.dispatch-merge-head .merge-title {
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dispatch-merge-head .merge-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mid);
+  white-space: nowrap;
+}
+.dispatch-merge-card .merge-summary-text {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--mid);
+  font-family: var(--font-sans);
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .dispatch-head { flex-wrap: wrap; }
+  .dispatch-title { width: 100%; flex: 0 0 100%; }
+}
