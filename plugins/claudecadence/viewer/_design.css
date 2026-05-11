@@ -3441,3 +3441,36 @@ body { line-height: 1.65; }
   .dispatch-contrib { border-right: none; border-bottom: 1px solid var(--soft); }
   .dispatch-contrib:last-child { border-bottom: none; }
 }
+
+/* v2.1.1: GFM pipe tables inside markdown blocks. Inherit the existing
+   .block.table styling so an inline | Header | row | renders the same as
+   a structured table block. */
+.block.md table,
+.body .block.md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+}
+.block.md table th,
+.block.md table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--soft);
+  text-align: left;
+  vertical-align: top;
+}
+.block.md table tr:last-child td { border-bottom: none; }
+.block.md table th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mid);
+  background: var(--bone);
+  border-bottom: 1px solid var(--neutral-300);
+}
+.block.md table tr:nth-child(even) td { background: var(--paper); }
+.block.md table tr:hover td { background: var(--bone); }
+[data-theme="dark"] .block.md table th { background: var(--bone); color: var(--mid); }

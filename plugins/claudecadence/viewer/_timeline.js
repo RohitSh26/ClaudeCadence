@@ -124,10 +124,78 @@
       (_m, label, href) => `<a href="${escapeHtml(safeHref(href))}" target="_blank" rel="noopener">${label}</a>`);
     return s;
   }
+  // v2.1.1: detect a GFM-style pipe table starting at lines[i].
+  //   | Header A | Header B |
+  //   |----------|----------|
+  //   | row 1 a  | row 1 b  |
+  // Returns { html, consumed } if a valid table starts here, else null.
+  // Per-cell alignment via ":---", ":--:", "---:" is honored.
+  function parsePipeTable(lines, i) {
+    const isPipeRow = (s) => /\|/.test(s) && s.trim().length > 0;
+    const isSepRow = (s) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(s);
+    if (i + 1 >= lines.length) return null;
+    if (!isPipeRow(lines[i]) || !isSepRow(lines[i + 1])) return null;
+
+    function splitRow(s) {
+      // Strip leading + trailing pipe if present, then split on inner pipes.
+      // Preserve escaped \| as a literal pipe within a cell.
+      let t = s.trim();
+      if (t.startsWith('|')) t = t.slice(1);
+      if (t.endsWith('|'))   t = t.slice(0, -1);
+      const cells = [];
+      let cur = '', esc = false;
+      for (const ch of t) {
+        if (esc)               { cur += ch; esc = false; continue; }
+        if (ch === '\\')       { esc = true; continue; }
+        if (ch === '|')        { cells.push(cur.trim()); cur = ''; continue; }
+        cur += ch;
+      }
+      cells.push(cur.trim());
+      return cells;
+    }
+
+    const headers = splitRow(lines[i]);
+    const aligns = splitRow(lines[i + 1]).map(c => {
+      const left = c.startsWith(':');
+      const right = c.endsWith(':');
+      return right && left ? 'center' : right ? 'right' : left ? 'left' : '';
+    });
+    // header column count must match separator column count
+    if (headers.length !== aligns.length) return null;
+
+    const rows = [];
+    let j = i + 2;
+    while (j < lines.length && isPipeRow(lines[j]) && !isSepRow(lines[j])) {
+      const cells = splitRow(lines[j]);
+      while (cells.length < headers.length) cells.push('');
+      cells.length = headers.length;
+      rows.push(cells);
+      j += 1;
+    }
+
+    let html = '<table>';
+    html += '<thead><tr>';
+    headers.forEach((h, k) => {
+      const sty = aligns[k] ? ` style="text-align:${aligns[k]}"` : '';
+      html += `<th${sty}>${inlineMd(h)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      html += '<tr>';
+      r.forEach((c, k) => {
+        const sty = aligns[k] ? ` style="text-align:${aligns[k]}"` : '';
+        html += `<td${sty}>${inlineMd(c)}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return { html, consumed: j - i };
+  }
+
   function simpleMd(src) {
     const lines = String(src || '').split('\n');
     const out = [];
-    const blockStart = /^(```|#{1,6}\s|>|[-*+]\s|\d+\.\s|---\s*$|\*\*\*\s*$|___\s*$)/;
+    const blockStart = /^(```|#{1,6}\s|>|[-*+]\s|\d+\.\s|---\s*$|\*\*\*\s*$|___\s*$|\|)/;
     let i = 0;
     while (i < lines.length) {
       const ln = lines[i];
@@ -143,6 +211,16 @@
           escapeHtml(buf.join('\n')) +
           '</code></pre>'
         );
+        continue;
+      }
+
+      // GFM pipe table — check before HR because the separator line "---" can
+      // collide with table separators. parsePipeTable returns null fast if
+      // the lookahead doesn't form a real table.
+      const tbl = parsePipeTable(lines, i);
+      if (tbl) {
+        out.push(tbl.html);
+        i += tbl.consumed;
         continue;
       }
 
