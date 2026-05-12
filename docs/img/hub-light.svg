@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" font-family="-apple-system, system-ui, Segoe UI, sans-serif">
+  <defs>
+    <filter id="cardShadowDark" x="-2%" y="-2%" width="104%" height="110%">
+      <feDropShadow dx="0" dy="6" stdDeviation="9" flood-color="#000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="700" fill="#fafaf7"/>
+  <rect x="40" y="40" width="1120" height="620" rx="10" fill="#fafaf7" stroke="#e8e6e0" stroke-width="1" filter="url(#cardShadowDark)"/>
+  <text x="72" y="100" fill="#0a0a0a" font-size="32" font-family="Source Serif 4, Georgia, serif" font-weight="500" letter-spacing="-0.5">
+    Cadences. <tspan fill="#6b6b6b" font-style="italic" font-size="18">Every Claude Code session you've started.</tspan>
+  </text>
+  <text x="1128" y="100" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">
+    updated 08:42 UTC · ~/.claude/cadence/
+  </text>
+  <line x1="72" y1="118" x2="1128" y2="118" stroke="#e8e6e0" stroke-width="1"/>
+  <g transform="translate(72, 144)" font-family="Geist Mono, SF Mono, monospace" font-size="11" letter-spacing="0.4">
+    <circle cx="6" cy="6" r="3.5" fill="#2f7a4d"/>
+    <text x="18" y="9" fill="#6b6b6b">active sessions <tspan fill="#0a0a0a" font-weight="500">2</tspan></text>
+    <circle cx="170" cy="6" r="3.5" fill="#b8830f"/>
+    <text x="184" y="9" fill="#6b6b6b">stale (last 24 h) <tspan fill="#0a0a0a" font-weight="500">3</tspan></text>
+    <circle cx="338" cy="6" r="3.5" fill="#a8a6a0"/>
+    <text x="352" y="9" fill="#6b6b6b">inactive (older) <tspan fill="#0a0a0a" font-weight="500">1</tspan></text>
+  </g>
+  <rect x="72" y="180" width="1056" height="170" rx="6" fill="#f0eee9" stroke="#e8e6e0"/>
+  <text x="88" y="202" fill="#6b6b6b" font-size="10" letter-spacing="1.4" font-family="Geist Mono, SF Mono, monospace">ACTIVITY HEATMAP · 14D</text>
+  <g transform="translate(94, 218)">
+    <text x="20" y="2"  fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Sun</text>
+    <text x="20" y="14" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Mon</text>
+    <text x="20" y="26" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Tue</text>
+    <text x="20" y="38" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Wed</text>
+    <text x="20" y="50" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Thu</text>
+    <text x="20" y="62" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Fri</text>
+    <text x="20" y="74" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">Sat</text>
+    <text x="36"  y="100" fill="#a8a6a0" font-size="8" font-family="Geist Mono, SF Mono, monospace">00</text>
+    <text x="276" y="100" fill="#a8a6a0" font-size="8" font-family="Geist Mono, SF Mono, monospace">06</text>
+    <text x="516" y="100" fill="#a8a6a0" font-size="8" font-family="Geist Mono, SF Mono, monospace">12</text>
+    <text x="756" y="100" fill="#a8a6a0" font-size="8" font-family="Geist Mono, SF Mono, monospace">18</text>
+    <rect x="30" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="70" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="-4" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="270" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="310" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.07"/>
+    <rect x="350" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.21"/>
+    <rect x="390" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.48"/>
+    <rect x="430" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="470" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.45"/>
+    <rect x="510" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.21"/>
+    <rect x="550" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.49"/>
+    <rect x="590" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.61"/>
+    <rect x="630" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.57"/>
+    <rect x="670" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.43"/>
+    <rect x="710" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.34"/>
+    <rect x="750" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.26"/>
+    <rect x="790" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.27"/>
+    <rect x="830" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.41"/>
+    <rect x="870" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.52"/>
+    <rect x="910" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.56"/>
+    <rect x="950" y="-4" width="36" height="10" rx="2" fill="#fb923c" opacity="0.28"/>
+    <rect x="30" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="70" y="8" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="8" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="8" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="8" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="8" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="270" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.12"/>
+    <rect x="310" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.16"/>
+    <rect x="350" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.35"/>
+    <rect x="390" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.88"/>
+    <rect x="430" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.94"/>
+    <rect x="470" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.75"/>
+    <rect x="510" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.42"/>
+    <rect x="550" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.86"/>
+    <rect x="590" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="1.00"/>
+    <rect x="630" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.95"/>
+    <rect x="670" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.76"/>
+    <rect x="710" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.52"/>
+    <rect x="750" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.38"/>
+    <rect x="790" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.49"/>
+    <rect x="830" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.62"/>
+    <rect x="870" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.83"/>
+    <rect x="910" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.93"/>
+    <rect x="950" y="8" width="36" height="10" rx="2" fill="#fb923c" opacity="0.49"/>
+    <rect x="30" y="20" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="70" y="20" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="20" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="20" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="20" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="270" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.11"/>
+    <rect x="310" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.16"/>
+    <rect x="350" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.33"/>
+    <rect x="390" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.86"/>
+    <rect x="430" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.93"/>
+    <rect x="470" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.74"/>
+    <rect x="510" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.43"/>
+    <rect x="550" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.86"/>
+    <rect x="590" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="1.00"/>
+    <rect x="630" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.96"/>
+    <rect x="670" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.77"/>
+    <rect x="710" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.57"/>
+    <rect x="750" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.38"/>
+    <rect x="790" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.47"/>
+    <rect x="830" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.64"/>
+    <rect x="870" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.84"/>
+    <rect x="910" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.93"/>
+    <rect x="950" y="20" width="36" height="10" rx="2" fill="#fb923c" opacity="0.53"/>
+    <rect x="30" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.07"/>
+    <rect x="70" y="32" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="32" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="32" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="32" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="32" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="270" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="310" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.13"/>
+    <rect x="350" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.34"/>
+    <rect x="390" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.79"/>
+    <rect x="430" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.91"/>
+    <rect x="470" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.74"/>
+    <rect x="510" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.37"/>
+    <rect x="550" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.79"/>
+    <rect x="590" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.98"/>
+    <rect x="630" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.90"/>
+    <rect x="670" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.69"/>
+    <rect x="710" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.50"/>
+    <rect x="750" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="790" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.48"/>
+    <rect x="830" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.64"/>
+    <rect x="870" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.80"/>
+    <rect x="910" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.88"/>
+    <rect x="950" y="32" width="36" height="10" rx="2" fill="#fb923c" opacity="0.47"/>
+    <rect x="30" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="70" y="44" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="44" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="44" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="44" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.06"/>
+    <rect x="270" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.11"/>
+    <rect x="310" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.14"/>
+    <rect x="350" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.32"/>
+    <rect x="390" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.82"/>
+    <rect x="430" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.88"/>
+    <rect x="470" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.71"/>
+    <rect x="510" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.38"/>
+    <rect x="550" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.83"/>
+    <rect x="590" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.97"/>
+    <rect x="630" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.89"/>
+    <rect x="670" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.71"/>
+    <rect x="710" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.50"/>
+    <rect x="750" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.40"/>
+    <rect x="790" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.50"/>
+    <rect x="830" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.61"/>
+    <rect x="870" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.82"/>
+    <rect x="910" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.91"/>
+    <rect x="950" y="44" width="36" height="10" rx="2" fill="#fb923c" opacity="0.45"/>
+    <rect x="30" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="70" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="270" y="56" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="310" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.15"/>
+    <rect x="350" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.32"/>
+    <rect x="390" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.74"/>
+    <rect x="430" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.80"/>
+    <rect x="470" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.61"/>
+    <rect x="510" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="550" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.75"/>
+    <rect x="590" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.83"/>
+    <rect x="630" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.81"/>
+    <rect x="670" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.61"/>
+    <rect x="710" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.48"/>
+    <rect x="750" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="790" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.40"/>
+    <rect x="830" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.08"/>
+    <rect x="870" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.73"/>
+    <rect x="910" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.79"/>
+    <rect x="950" y="56" width="36" height="10" rx="2" fill="#fb923c" opacity="0.45"/>
+    <rect x="30" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="70" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="110" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="150" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="190" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="230" y="68" width="36" height="10" rx="2" fill="#e8e6e0"/>
+    <rect x="270" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.07"/>
+    <rect x="310" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.07"/>
+    <rect x="350" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.14"/>
+    <rect x="390" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.34"/>
+    <rect x="430" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="470" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.28"/>
+    <rect x="510" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.15"/>
+    <rect x="550" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.35"/>
+    <rect x="590" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.38"/>
+    <rect x="630" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="670" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.27"/>
+    <rect x="710" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.23"/>
+    <rect x="750" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.14"/>
+    <rect x="790" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.22"/>
+    <rect x="830" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.28"/>
+    <rect x="870" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.31"/>
+    <rect x="910" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.36"/>
+    <rect x="950" y="68" width="36" height="10" rx="2" fill="#fb923c" opacity="0.21"/>
+  </g>
+  <text x="94" y="338" fill="#a8a6a0" font-size="10" font-family="Geist Mono, SF Mono, monospace">last 14d · 184 prompts</text>
+  <g transform="translate(1020, 330)">
+    <text x="0" y="8" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace">less</text>
+    <rect x="28" y="0" width="10" height="10" rx="2" fill="#fb923c" opacity="0.18"/>
+    <rect x="42" y="0" width="10" height="10" rx="2" fill="#fb923c" opacity="0.4"/>
+    <rect x="56" y="0" width="10" height="10" rx="2" fill="#fb923c" opacity="0.65"/>
+    <rect x="70" y="0" width="10" height="10" rx="2" fill="#fb923c" opacity="1"/>
+    <text x="84" y="8" fill="#a8a6a0" font-size="9" font-family="Geist Mono, SF Mono, monospace">more</text>
+  </g>
+  <g transform="translate(72, 372)" font-family="Geist Mono, SF Mono, monospace" font-size="10.5">
+    <text x="0" y="14" fill="#a8a6a0" letter-spacing="1.4">SHOW</text>
+    <rect x="42" y="2" width="36" height="20" rx="10" fill="#ffe5d2" stroke="#fb923c"/>
+    <text x="48" y="16" fill="#c2570b">all <tspan fill="#8a3c05">6</tspan></text>
+    <rect x="86" y="2" width="64" height="20" rx="10" fill="#fafaf7" stroke="#e8e6e0"/>
+    <text x="92" y="16" fill="#6b6b6b">active <tspan fill="#a8a6a0">2</tspan></text>
+    <rect x="158" y="2" width="60" height="20" rx="10" fill="#fafaf7" stroke="#e8e6e0"/>
+    <text x="164" y="16" fill="#6b6b6b">stale <tspan fill="#a8a6a0">3</tspan></text>
+    <rect x="226" y="2" width="80" height="20" rx="10" fill="#fafaf7" stroke="#e8e6e0"/>
+    <text x="232" y="16" fill="#6b6b6b">inactive <tspan fill="#a8a6a0">1</tspan></text>
+    <rect x="800" y="2" width="328" height="20" rx="4" fill="#f0eee9" stroke="#e8e6e0"/>
+    <text x="820" y="16" fill="#a8a6a0" font-style="italic" font-family="-apple-system, system-ui, sans-serif" font-size="11">Search names, paths, or session content…</text>
+    <text x="1102" y="16" fill="#a8a6a0" font-size="9">⌘K</text>
+  </g>
+  <g transform="translate(72, 420)" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1056" height="58" rx="6" fill="#f0eee9" stroke="#e8e6e0"/>
+    <rect x="0" y="0" width="4" height="58" fill="#2f7a4d"/>
+    <text x="20" y="22" fill="#0a0a0a" font-size="14" font-weight="500" font-family="Source Serif 4, Georgia, serif">BloomList</text>
+    <rect x="100" y="11" width="62" height="15" rx="7" fill="#e8f1ec"/>
+    <text x="131" y="22" fill="#2f7a4d" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">VIEWER UP</text>
+    <text x="20" y="42" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace">/Users/edhaa/Development/BloomList</text>
+    <text x="1036" y="22" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">214 nodes</text>
+    <text x="1036" y="42" fill="#a8a6a0" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">last 2m ago</text>
+    <rect x="956" y="34" width="56" height="16" rx="8" fill="#e8f1ec"/>
+    <text x="984" y="45" fill="#2f7a4d" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">ACTIVE</text>
+
+    <rect x="0" y="68" width="1056" height="58" rx="6" fill="#f0eee9" stroke="#e8e6e0"/>
+    <rect x="0" y="68" width="4" height="58" fill="#b8830f"/>
+    <text x="20" y="90" fill="#0a0a0a" font-size="14" font-weight="500" font-family="Source Serif 4, Georgia, serif">orchard-ops</text>
+    <rect x="120" y="79" width="62" height="15" rx="7" fill="#e8f1ec"/>
+    <text x="151" y="90" fill="#2f7a4d" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">VIEWER UP</text>
+    <text x="20" y="110" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace">/Users/edhaa/Development/orchard-ops</text>
+    <text x="1036" y="90" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">3,142 nodes</text>
+    <text x="1036" y="110" fill="#a8a6a0" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">last 4h ago</text>
+    <rect x="966" y="102" width="46" height="16" rx="8" fill="#f6efde"/>
+    <text x="989" y="113" fill="#b8830f" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">STALE</text>
+
+    <rect x="0" y="136" width="1056" height="58" rx="6" fill="#f0eee9" stroke="#e8e6e0"/>
+    <rect x="0" y="136" width="4" height="58" fill="#b8830f"/>
+    <text x="20" y="158" fill="#0a0a0a" font-size="14" font-weight="500" font-family="Source Serif 4, Georgia, serif">peony-rust</text>
+    <text x="20" y="178" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace">/Users/edhaa/Development/peony-rust</text>
+    <text x="1036" y="158" fill="#a8a6a0" font-size="11" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">876 nodes</text>
+    <text x="1036" y="178" fill="#a8a6a0" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">last 16h ago</text>
+    <rect x="966" y="170" width="46" height="16" rx="8" fill="#f6efde"/>
+    <text x="989" y="181" fill="#b8830f" font-size="9" letter-spacing="0.4" text-anchor="middle" font-family="Geist Mono, SF Mono, monospace">STALE</text>
+  </g>
+  <text x="1116" y="690" fill="#a8a6a0" font-size="10" font-family="Geist Mono, SF Mono, monospace" text-anchor="end">claudecadence · v2.2 · hub home</text>
+</svg>

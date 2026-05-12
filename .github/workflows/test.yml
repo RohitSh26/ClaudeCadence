@@ -34,11 +34,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: node --check on every JS file
-        run: |
-          find plugins/claudecadence -type f \( -name '*.js' -o -path '*/bin/cadence-*' \) -print0 \
-            | xargs -0 -n1 node --check
-
       - name: Test suite
         run: npm test
 

@@ -18,6 +18,16 @@
   <br><sub><em>Light · apricot on bone</em></sub>
 </p>
 
+<p align="center">
+  <img alt="ClaudeCadence hub — cross-project home with activity heatmap (dark)" src="docs/img/hub-dark.svg" width="100%">
+  <br><sub><em>Hub · cross-project home, 14-day activity heatmap</em></sub>
+</p>
+
+<p align="center">
+  <img alt="ClaudeCadence hub — cross-project home with activity heatmap (light)" src="docs/img/hub-light.svg" width="100%">
+  <br><sub><em>Hub · light variant</em></sub>
+</p>
+
 ClaudeCadence is a Claude Code plugin that gives you a **live HTML timeline** of your sessions — every tool call, every sub-agent fork, every PR opened, every decision made — rendered as an expandable, filterable, fork-aware vertical timeline you open in your browser.
 
 > **🔋 Zero extra LLM cost — guaranteed.**
