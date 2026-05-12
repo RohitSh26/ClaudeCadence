@@ -90,10 +90,87 @@
         lastTs: effectiveTs,
         status: statusFor(effectiveTs),
         sessions,
+        nodes,   // v2.2: keep nodes for cross-project search + heatmap
       };
     } catch (err) {
-      stats[c.slug] = { count: 0, lastTs: null, status: 'inactive', sessions: [], error: String(err) };
+      stats[c.slug] = { count: 0, lastTs: null, status: 'inactive', sessions: [], nodes: [], error: String(err) };
     }
+  }
+
+  // v2.2: 7×24 activity heatmap of prompts across all cadences.
+  // Returns an array of {day, hour, count} for the last 14 days.
+  function buildHeatmap() {
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const grid = {};                                  // key 'd-h' → count
+    for (const slug of Object.keys(stats)) {
+      const nodes = stats[slug].nodes || [];
+      for (const n of nodes) {
+        if (!(n.tags || []).includes('prompt')) continue;  // prompts only
+        const t = Date.parse(n.ts);
+        if (!Number.isFinite(t) || t < cutoff) continue;
+        const d = new Date(t);
+        const key = d.getDay() + '-' + d.getHours();
+        grid[key] = (grid[key] || 0) + 1;
+      }
+    }
+    return grid;
+  }
+
+  function renderHeatmap() {
+    const root = document.getElementById('heatmap');
+    if (!root) return;
+    const grid = buildHeatmap();
+    const values = Object.values(grid);
+    const max = values.length ? Math.max(...values) : 0;
+    if (max === 0) {
+      root.innerHTML = '<div class="hm-empty">No prompts in the last 14 days.</div>';
+      return;
+    }
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    let html = '<div class="hm-grid"><div class="hm-corner"></div>';
+    // hour labels (00–23)
+    for (let h = 0; h < 24; h++) {
+      html += '<div class="hm-h">' + (h % 6 === 0 ? String(h).padStart(2,'0') : '') + '</div>';
+    }
+    for (let d = 0; d < 7; d++) {
+      html += '<div class="hm-d">' + days[d] + '</div>';
+      for (let h = 0; h < 24; h++) {
+        const count = grid[d + '-' + h] || 0;
+        const intensity = count === 0 ? 0 : Math.max(0.18, count / max);
+        html += '<div class="hm-cell" style="opacity:' + intensity.toFixed(2) +
+                '" title="' + days[d] + ' ' + String(h).padStart(2,'0') + ':00 — ' + count + ' prompt' + (count===1?'':'s') + '"></div>';
+      }
+    }
+    html += '</div>';
+    html += '<div class="hm-legend">' +
+      '<span>last 14d · ' + values.reduce((a,b)=>a+b,0) + ' prompts</span>' +
+      '<span class="hm-scale"><span>less</span>' +
+        '<i style="opacity:0.18"></i><i style="opacity:0.4"></i><i style="opacity:0.65"></i><i style="opacity:1"></i>' +
+        '<span>more</span></span>' +
+      '</div>';
+    root.innerHTML = html;
+  }
+
+  // v2.2: cross-project content search. Search across all cached cadence
+  // nodes' titles + summaries. Return up to 8 results per cadence.
+  function searchCrossProject(q) {
+    if (!q || q.length < 2) return [];
+    const lq = q.toLowerCase();
+    const results = [];
+    for (const slug of Object.keys(stats)) {
+      const nodes = stats[slug].nodes || [];
+      const cadName = (registry.cadences || []).find(c => c.slug === slug)?.name || slug;
+      const hits = [];
+      for (const n of nodes) {
+        const hay = ((n.title||'') + ' ' + (n.summary||'')).toLowerCase();
+        if (hay.includes(lq)) {
+          hits.push(n);
+          if (hits.length >= 8) break;
+        }
+      }
+      if (hits.length) results.push({ slug, name: cadName, hits });
+    }
+    return results;
   }
 
   async function refresh() {
@@ -257,6 +334,47 @@
 
       root.appendChild(card);
     });
+
+    // v2.2: heatmap + cross-project search results
+    renderHeatmap();
+    renderSearchResults();
+  }
+
+  function renderSearchResults() {
+    const root = document.getElementById('search-results');
+    if (!root) return;
+    if (!searchQuery || searchQuery.length < 2) {
+      root.innerHTML = '';
+      root.classList.remove('is-active');
+      return;
+    }
+    const results = searchCrossProject(searchQuery);
+    if (!results.length) {
+      root.innerHTML = '<div class="sr-empty">No matches in session content.</div>';
+      root.classList.add('is-active');
+      return;
+    }
+    const totalHits = results.reduce((s, r) => s + r.hits.length, 0);
+    let html = '<div class="sr-head">' + totalHits + ' match' + (totalHits===1?'':'es') +
+               ' across ' + results.length + ' cadence' + (results.length===1?'':'s') + '</div>';
+    for (const r of results) {
+      html += '<div class="sr-group"><div class="sr-group-head">' + escapeHtml(r.name) +
+              '<span class="sr-count">' + r.hits.length + '</span></div>';
+      for (const n of r.hits) {
+        html += '<a class="sr-hit" href="c/' + encodeURIComponent(r.slug) + '/#' + encodeURIComponent(n.id||'') + '">' +
+                '<span class="sr-when">' + fmtRel(n.ts) + '</span>' +
+                '<span class="sr-title">' + escapeHtml((n.title||'').slice(0,120)) + '</span>' +
+                '</a>';
+      }
+      html += '</div>';
+    }
+    root.innerHTML = html;
+    root.classList.add('is-active');
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   document.addEventListener('DOMContentLoaded', () => {

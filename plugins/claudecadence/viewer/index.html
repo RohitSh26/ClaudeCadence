@@ -96,6 +96,8 @@
         <span class="sep">·</span>
         <strong id="meta-count">0</strong>
         <span class="label">nodes</span>
+        <span class="sep">·</span>
+        <a class="version-tag" id="version-tag" href="https://github.com/RohitSh26/ClaudeCadence/releases" target="_blank" rel="noopener" title="ClaudeCadence version">v—</a>
       </span>
     </div>
   </header>
@@ -138,15 +140,66 @@
         </div>
       </div>
       <div class="actions">
+        <button id="btn-decisions" class="pin-btn" type="button" aria-pressed="false" title="Filter to decisions and decision-verb prompts only">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M3 2v10l5-3 5 3V2z"/>
+          </svg>
+          <span class="label">decisions</span>
+          <span class="count" id="btn-decisions-count">0</span>
+        </button>
         <button id="btn-collapse-all">collapse all</button>
         <button id="btn-expand-all">expand all</button>
       </div>
     </div>
 
     <ol class="timeline" id="timeline" style="--lane: var(--lane-trunk);">
-      <div class="empty">
-        Nothing yet.
-        <div class="hint">Start working in Claude Code — the timeline fills itself.</div>
+      <div class="first-run" id="first-run">
+        <div class="first-run-hero">
+          <div class="eyebrow"><span class="pulse"></span>watching · waiting for your next prompt</div>
+          <h2>You're set up.</h2>
+          <p>The timeline lives here. Every prompt you send, every tool call Claude runs, every sub-agent dispatched, every PR opened — it all lands in this view, automatically, as it happens.</p>
+        </div>
+
+        <div class="first-run-card-grid">
+          <div class="first-run-card">
+            <div class="tag">01 · What you'll see</div>
+            <h3>One node per event</h3>
+            <p>Your prompts as cards, Claude's responses as cards, tool calls bucketed inside each turn (read · edit · bash · web · subagent · failures), decisions called out with apricot tint.</p>
+          </div>
+          <div class="first-run-card">
+            <div class="tag">02 · Parallel sub-agents</div>
+            <h3>Fork → N lanes → merge</h3>
+            <p>When Claude dispatches sub-agents in parallel, they render as a multi-lane block with fan-out / fan-in SVG curves and a contribution card showing what each lane shipped.</p>
+          </div>
+          <div class="first-run-card">
+            <div class="tag">03 · Live</div>
+            <h3>5-second poll</h3>
+            <p>This page re-fetches the data file every 5 seconds. No SSE, no WebSocket — just plain HTTP polling against a local file. Open it once and let it run.</p>
+          </div>
+          <div class="first-run-card">
+            <div class="tag">04 · Local</div>
+            <h3>Nothing leaves your machine</h3>
+            <p>Zero LLM cost, zero telemetry, zero hosted services. The plugin watches what Claude Code is already doing and writes a JSON file your browser polls.</p>
+          </div>
+        </div>
+
+        <div class="first-run-preview">
+          <div class="preview-label">Example — a real fork-and-merge dispatch</div>
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/RohitSh26/ClaudeCadence/main/docs/img/timeline-dark.svg">
+            <img alt="What a session with parallel sub-agents looks like" src="https://raw.githubusercontent.com/RohitSh26/ClaudeCadence/main/docs/img/timeline-light.svg">
+          </picture>
+        </div>
+
+        <div class="first-run-help">
+          <strong>Quick reference</strong>
+          <ul>
+            <li><code>/claudecadence:status</code> — show node count, running version, server state</li>
+            <li><code>/claudecadence:doctor</code> — full self-diagnostic</li>
+            <li><code>/claudecadence:home</code> — cross-project view of every cadence</li>
+            <li><code>/claudecadence:stop</code> — stop the local viewer server</li>
+          </ul>
+        </div>
       </div>
     </ol>
 

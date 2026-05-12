@@ -293,6 +293,20 @@ function makeProjectHandler(cadenceDir) {
       return;
     }
 
+    // /api/version — returns the running plugin version. Read from the
+    // plugin's manifest at process start; cheap, can't change at runtime.
+    if (clean === '/api/version') {
+      let v = null;
+      try {
+        const pj = process.env.CLAUDE_PLUGIN_ROOT
+          ? path.join(process.env.CLAUDE_PLUGIN_ROOT, '.claude-plugin/plugin.json')
+          : path.join(path.dirname(path.dirname(__filename)), '.claude-plugin/plugin.json');
+        v = JSON.parse(fs.readFileSync(pj, 'utf8')).version || null;
+      } catch (_) {}
+      sendJson(res, 200, { version: v });
+      return;
+    }
+
     // /api/hub-url — returns the running hub URL (or null) so the per-project
     // viewer can show a "all cadences" link when the user has the hub up.
     if (clean === '/api/hub-url') {

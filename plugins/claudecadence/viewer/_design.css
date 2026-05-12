@@ -3474,3 +3474,287 @@ body { line-height: 1.65; }
 .block.md table tr:nth-child(even) td { background: var(--paper); }
 .block.md table tr:hover td { background: var(--bone); }
 [data-theme="dark"] .block.md table th { background: var(--bone); color: var(--mid); }
+
+/* v2.2: running version tag in chrome */
+.live-meter .version-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--mid);
+  text-decoration: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: color .14s, background .14s;
+}
+.live-meter .version-tag:hover {
+  color: var(--apricot-600);
+  background: var(--bone);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   v2.2 — First-run experience (empty state upgrade)
+   When the timeline has zero nodes, the user sees this onboarding panel
+   instead of "Nothing yet." Replaced by real timeline content on the
+   first hook event.
+   ─────────────────────────────────────────────────────────── */
+.first-run {
+  display: block;
+  padding: 36px 4px 60px;
+  max-width: none;
+  border: none;
+  background: transparent;
+}
+.first-run .first-run-hero {
+  max-width: 64ch;
+  margin: 0 0 36px;
+}
+.first-run .first-run-hero .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--mid);
+  margin: 0 0 14px;
+}
+.first-run .first-run-hero .eyebrow .pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--apricot-500);
+  box-shadow: 0 0 0 4px var(--apricot-glow);
+  animation: breath 2.4s var(--ease-out) infinite;
+}
+@keyframes breath {
+  0%, 100% { box-shadow: 0 0 0 3px var(--apricot-glow); opacity: 1; }
+  50%      { box-shadow: 0 0 0 6px transparent; opacity: 0.55; }
+}
+.first-run .first-run-hero h2 {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 0 0 14px;
+  text-wrap: balance;
+  color: var(--ink);
+  font-style: normal;
+}
+.first-run .first-run-hero p {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--mid);
+  margin: 0;
+  font-style: italic;
+}
+
+.first-run-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 36px;
+}
+.first-run-card {
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md);
+  padding: 22px 24px;
+  background: var(--paper);
+}
+.first-run-card .tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--mid);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.first-run-card .tag::before {
+  content: '';
+  width: 14px; height: 1.5px;
+  background: var(--apricot-500);
+  border-radius: 1px;
+}
+.first-run-card h3 {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
+  margin: 0 0 8px;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+  color: var(--ink);
+}
+.first-run-card p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--neutral-700);
+  line-height: 1.6;
+}
+
+.first-run-preview {
+  margin: 0 0 36px;
+}
+.first-run-preview .preview-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--mid);
+  margin: 0 0 10px;
+}
+.first-run-preview img,
+.first-run-preview picture { display: block; width: 100%; height: auto; }
+.first-run-preview img {
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.first-run-help {
+  padding: 18px 22px;
+  background: var(--bone);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md);
+}
+.first-run-help strong {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--mid);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+.first-run-help ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.first-run-help li { font-size: 13.5px; color: var(--neutral-700); font-family: var(--font-sans); }
+.first-run-help code {
+  background: var(--paper);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--apricot-600);
+}
+
+@media (max-width: 720px) {
+  .first-run-card-grid { grid-template-columns: 1fr; }
+}
+
+/* v2.2: file-edit diff badge in child rows ("+12 −3"). */
+.child-group-body .child-row .diff {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  margin-right: 8px;
+  padding: 1px 6px;
+  background: var(--bone);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-sm);
+  cursor: help;
+}
+.child-group-body .child-row .diff .add { color: var(--success); font-weight: 500; }
+.child-group-body .child-row .diff .del { color: var(--danger);  font-weight: 500; }
+
+/* v2.2: decisions filter pin in session-strip actions */
+.session-strip .actions .pin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--neutral-300);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mid);
+  cursor: pointer;
+  transition: color .14s, border-color .14s, background .14s;
+}
+.session-strip .actions .pin-btn:hover { color: var(--ink); border-color: var(--mid); }
+.session-strip .actions .pin-btn.is-active {
+  background: var(--apricot-100);
+  border-color: var(--apricot-500);
+  color: var(--apricot-600);
+}
+.session-strip .actions .pin-btn svg { color: var(--apricot-500); }
+.session-strip .actions .pin-btn .count {
+  background: var(--bone);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-pill);
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--neutral-700);
+  min-width: 16px;
+  text-align: center;
+}
+.session-strip .actions .pin-btn.is-active .count {
+  background: var(--apricot-500);
+  color: var(--paper);
+  border-color: var(--apricot-500);
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   v2.2 — Mobile responsive for per-project viewer
+   ─────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .app-header {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .app-header .brand small { display: none; }
+  .app-header .session-meta { width: 100%; justify-content: space-between; }
+
+  .stats-ribbon { flex-wrap: wrap; gap: 12px; }
+  .stats-ribbon .stat { flex: 1 1 calc(50% - 12px); min-width: 0; }
+
+  .filter-strip {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .filter-strip .group { flex-wrap: wrap; }
+  .filter-strip .search { width: 100%; order: 99; }
+  .filter-strip .divider { display: none; }
+
+  .workspace { padding: 14px; }
+  .workspace .session-strip {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .workspace .session-strip h1 { font-size: 22px; }
+  .workspace .session-strip .actions { flex-wrap: wrap; }
+
+  .timeline { padding-left: 0; }
+  .node { grid-template-columns: 36px 1fr; column-gap: 8px; }
+  .node .rail::before { left: 17px; }
+  .node .marker { left: 12px; }
+
+  .card > summary {
+    grid-template-columns: 10px 1fr auto auto;
+    column-gap: 8px;
+    padding: 8px 12px;
+  }
+  .card[open] > summary { padding: 12px 12px 8px; }
+
+  .first-run { padding: 20px 8px 40px; }
+  .first-run-card-grid { grid-template-columns: 1fr; }
+  .first-run-card { padding: 16px 18px; }
+  .first-run .first-run-hero h2 { font-size: 26px; }
+  .first-run .first-run-hero p { font-size: 15px; }
+
+  .legend { flex-wrap: wrap; gap: 10px; font-size: 9.5px; }
+}
+
+@media (max-width: 480px) {
+  .stats-ribbon .stat { flex: 1 1 100%; }
+  .workspace .session-strip .actions .pin-btn .label { display: none; }
+  .live-meter .version-tag { display: none; }
+}

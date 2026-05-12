@@ -521,21 +521,49 @@ function handlePostToolUse(payload) {
       MultiEdit: 'Edited (multi)',
       NotebookEdit: 'Edited notebook',
     }[tool] || 'Touched';
-    let sizeHint = '';
+    // v2.2 — compute precise +added / -removed line counts from the tool
+    // input. This is read-only on the payload Claude Code already passed; no
+    // file system inspection. Used by the viewer to render "+12 −3" badges
+    // on file-edit child rows.
+    const countLines = (s) => (typeof s === 'string' && s.length) ? (s.split('\n').length) : 0;
+    let added = 0, removed = 0;
+    if (tool === 'Write') {
+      added = countLines(ti.content || ti.new_string || '');
+    } else if (tool === 'Edit') {
+      added = countLines(ti.new_string || '');
+      removed = countLines(ti.old_string || '');
+    } else if (tool === 'MultiEdit') {
+      for (const e of (ti.edits || [])) {
+        added += countLines(e.new_string || '');
+        removed += countLines(e.old_string || '');
+      }
+    } else if (tool === 'NotebookEdit') {
+      added = countLines(ti.new_source || '');
+    }
+    let totalLines = 0;
     if (tr && typeof tr === 'object') {
       const content = tr.content || '';
       if (typeof content === 'string' && content.includes('\n')) {
-        sizeHint = ` · ${content.split('\n').length} lines`;
+        totalLines = content.split('\n').length;
       }
     }
+    const summaryParts = [];
+    if (added)      summaryParts.push('+' + added);
+    if (removed)    summaryParts.push('−' + removed);          // U+2212 minus
+    if (totalLines) summaryParts.push(totalLines + ' lines');
+    const summary = summaryParts.join(' · ');
     return {
       agent: 'orchestrator',
       kind: 'tool_call',
       status: 'completed',
       title: `${verb} ${filePath}`,
-      summary: sizeHint.replace(/^\s·\s/, '') || '',
+      summary,
       tags: ['file', verb.toLowerCase().split(/\s+/)[0]],
       session,
+      file_path: filePath,
+      lines_added: added,
+      lines_removed: removed,
+      lines_total: totalLines,
     };
   }
 

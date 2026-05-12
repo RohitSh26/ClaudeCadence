@@ -31,3 +31,19 @@ Things parked for after the next release.
 - `docs/DATA-MODEL.md` — JSON schema for nodes + block types.
 - `docs/COOKBOOK.md` — examples of customizing what gets recorded.
 - `CONTRIBUTING.md`.
+
+## Deferred from v2.2
+
+These were intentionally left out of the v2.2 bundle and need their own focused design pass.
+
+### Bug B — mid-stream interrupt
+When the user submits prompt #2 before Claude finishes responding to prompt #1, Cadence doesn't cleanly attribute the merged response to two distinct turns. v1.9.4's look-ahead heuristic was wrong (misidentified system-reminder injections as mid-stream interrupts). The correct fix is queue-aware: peek at remaining FIFO entries, bound collection by the next-turn's `lowerBoundTs`. Estimate ~4 hours. Start in `cadence_hook.js :: firstAssistantTextAfter`.
+
+### Renderer virtualization
+The viewer rebuilds the full DOM every 5s poll. Fine at ~500 nodes, stutters at 5,000+, locks at 50,000. Needs diff-based rendering that preserves `<details>` open state across rebuilds. ~6 hours.
+
+### GitHub Pages demo
+Host the iter6 demo viewer with synthetic BloomList data at `https://rohitsh26.github.io/ClaudeCadence/`. Requires enabling Pages in repo settings + choosing build approach (`docs/` folder vs `gh-pages` branch). ~30 min once decided.
+
+### Full orchestrator response synthesis
+v1.9.7's graph-derived capture handles simple turns. Multi-fork orchestrator turns (5 sub-agents dispatched, response interleaved with dispatches) still don't get cluster boundaries quite right. ~3 hours, mostly transcript-shape investigation. Start in `cadence_hook.js :: deriveCatchUpNodes`.
