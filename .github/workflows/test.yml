@@ -1,0 +1,48 @@
+name: Test
+
+# Runs the in-repo test suite on every push and PR. The suite has zero
+# runtime dependencies — it's a tiny custom runner in test/run.js so we
+# don't pull a third-party test framework into a repo that promises no
+# third-party deps.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['18', '20', '22']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: node --check on every JS file
+        run: |
+          find plugins/claudecadence -type f \( -name '*.js' -o -path '*/bin/cadence-*' \) -print0 \
+            | xargs -0 -n1 node --check
+
+      - name: Test suite
+        run: npm test
+
+      - name: Audit script smoke (read-only)
+        env:
+          CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}/plugins/claudecadence
+        run: ./plugins/claudecadence/bin/cadence-audit | grep -q 'ClaudeCadence'

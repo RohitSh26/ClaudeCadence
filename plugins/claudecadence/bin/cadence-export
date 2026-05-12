@@ -1,0 +1,153 @@
+#!/usr/bin/env node
+// ClaudeCadence — markdown export.
+//
+// Exports a session, project, or date range as a markdown file you can
+// share, archive, or drop into Obsidian / a wiki. Read-only on plugin
+// state; writes one file to a path you specify.
+//
+// Usage:
+//   cadence-export                            # active project, all sessions → stdout
+//   cadence-export --project /path/to/proj    # specific project
+//   cadence-export --session <session-id>     # one session only
+//   cadence-export --since 7d                 # only the last N days (7d / 24h / 30m)
+//   cadence-export --out path/to/file.md      # write to file instead of stdout
+//   cadence-export --week                     # alias for --since 7d
+//   cadence-export --decisions                # only decisions
+
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+function arg(name, def) {
+  const i = process.argv.indexOf('--' + name);
+  if (i === -1) return def;
+  const v = process.argv[i + 1];
+  return v && !v.startsWith('--') ? v : true;
+}
+function hasFlag(name) {
+  return process.argv.includes('--' + name);
+}
+
+const PROJECT = arg('project', process.env.CLAUDE_PROJECT_DIR || process.cwd());
+const NODES_FILE = path.join(PROJECT, '.claude/cadence/data/nodes.js');
+if (!fs.existsSync(NODES_FILE)) {
+  console.error('No cadence data at ' + NODES_FILE);
+  console.error('Hint: send any prompt in Claude Code from inside this project first.');
+  process.exit(1);
+}
+const raw = fs.readFileSync(NODES_FILE, 'utf8');
+const m = raw.match(/window\.\w+\s*=\s*(\[[\s\S]*?\]);?\s*$/);
+const nodes = m ? JSON.parse(m[1]) : [];
+
+// ─── Filters ──────────────────────────────────────────────────────────
+let filtered = nodes.slice();
+
+// --since 7d / 24h / 30m or --week
+let since = arg('since', null);
+if (hasFlag('week') && !since) since = '7d';
+if (since) {
+  const re = /^(\d+)([dhm])$/.exec(since);
+  if (!re) {
+    console.error('--since expects a value like "7d", "24h", or "30m"');
+    process.exit(2);
+  }
+  const n = parseInt(re[1], 10);
+  const ms = { d: 86400e3, h: 3600e3, m: 60e3 }[re[2]];
+  const cutoff = Date.now() - n * ms;
+  filtered = filtered.filter(node => Date.parse(node.ts) >= cutoff);
+}
+
+// --session <id>
+const session = arg('session', null);
+if (session && typeof session === 'string') {
+  filtered = filtered.filter(n => (n.session || 'main') === session || (n.session || '').startsWith(session));
+}
+
+// --decisions
+const DECISION_VERBS = /\b(decide|chose|chosen|use|go with|pick|ship|skip|kill|drop|merge|deploy|approve|reject|defer)\b/i;
+function isDecision(n) {
+  if (n.kind === 'decision' || n.status === 'decision') return true;
+  if ((n.tags || []).indexOf('decision') !== -1) return true;
+  if ((n.tags || []).indexOf('prompt') !== -1 && DECISION_VERBS.test(n.title || '')) return true;
+  return false;
+}
+if (hasFlag('decisions')) {
+  filtered = filtered.filter(isDecision);
+}
+
+// ─── Group by session ─────────────────────────────────────────────────
+const bySession = new Map();
+for (const n of filtered) {
+  const sid = n.session || 'main';
+  if (!bySession.has(sid)) bySession.set(sid, []);
+  bySession.get(sid).push(n);
+}
+
+// ─── Render markdown ──────────────────────────────────────────────────
+const lines = [];
+const projName = path.basename(PROJECT);
+lines.push('# ClaudeCadence export · ' + projName);
+lines.push('');
+lines.push('Exported ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC · ' +
+  filtered.length + ' node' + (filtered.length === 1 ? '' : 's') +
+  ' across ' + bySession.size + ' session' + (bySession.size === 1 ? '' : 's') +
+  (since ? ' (last ' + since + ')' : '') +
+  (hasFlag('decisions') ? ', decisions only' : '') + '.');
+lines.push('');
+lines.push('Project: `' + PROJECT + '`');
+lines.push('');
+
+for (const [sid, ns] of bySession) {
+  ns.sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+  lines.push('---');
+  lines.push('');
+  lines.push('## Session `' + sid.slice(0, 12) + '`');
+  lines.push('');
+  if (ns.length) {
+    const first = ns[0].ts, last = ns[ns.length - 1].ts;
+    lines.push('_' + first + ' → ' + last + ' · ' + ns.length + ' nodes_');
+    lines.push('');
+  }
+  for (const n of ns) {
+    const t = (n.ts || '').replace('T', ' ').slice(0, 19);
+    const kind = (n.kind || 'node').toUpperCase();
+    const agent = n.agent || '';
+    lines.push('### ' + (n.title || '(untitled)'));
+    lines.push('');
+    lines.push('- **when**: `' + t + '`');
+    lines.push('- **kind**: `' + kind + '`  · **agent**: `' + agent + '`' +
+      (n.status ? '  · **status**: `' + n.status + '`' : '') +
+      (n.source_tool_use_id ? '  · **tuid**: `' + n.source_tool_use_id.slice(-8) + '`' : ''));
+    if ((n.tags || []).length) {
+      lines.push('- **tags**: ' + n.tags.map(t => '`' + t + '`').join(', '));
+    }
+    if (n.summary) {
+      lines.push('');
+      lines.push('> ' + n.summary.replace(/\n/g, '\n> '));
+    }
+    if (n.blocks && n.blocks.length) {
+      for (const b of n.blocks) {
+        if (b.type === 'markdown' && b.value) {
+          lines.push('');
+          lines.push(b.value);
+        } else if (b.type === 'code' && b.value) {
+          lines.push('');
+          lines.push('```' + (b.lang || ''));
+          lines.push(b.value);
+          lines.push('```');
+        }
+      }
+    }
+    lines.push('');
+  }
+}
+
+const out = lines.join('\n');
+const outPath = arg('out', null);
+if (outPath && typeof outPath === 'string') {
+  fs.writeFileSync(outPath, out);
+  console.error('Wrote ' + outPath + ' (' + out.length + ' bytes)');
+} else {
+  process.stdout.write(out);
+}
