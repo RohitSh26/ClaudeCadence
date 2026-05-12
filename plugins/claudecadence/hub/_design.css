@@ -2102,3 +2102,79 @@ mark {
     transition: none !important;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   v2.2 — Dark mode for the hub. Same tokens as the per-project viewer
+   (Claude Design iter6, sage on charcoal). Variable rotation only;
+   no selector overrides needed downstream.
+   ────────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] {
+  /* Surfaces — cool deep charcoal, faint blue undertone */
+  --paper:       #0e1116;
+  --bone:        #151921;
+  --soft:        #232833;
+  --neutral-300: #2c323e;
+  --neutral-400: #5a6172;
+  --neutral-700: #c8ced9;
+  --graphite:    #c8ced9;
+
+  /* Text — warm-leaning off-white. 230/235/239, faint cream cast */
+  --ink:  #e8ebef;
+  --mid:  #8a93a3;
+
+  /* Accent ramp — rotates apricot → sage. Same role per stop. */
+  --apricot-100:  #122723;
+  --apricot-500:  #6ee7c1;
+  --apricot-600:  #9af0d4;
+  --apricot-700:  #c1f5e3;
+  --apricot-glow: rgba(110, 231, 193, 0.18);
+
+  /* States — luminance lifted, slightly desaturated.
+     Backgrounds become deeply tinted near-blacks. */
+  --success:    #86efac;
+  --warning:    #fcd34d;
+  --danger:     #fca5a5;
+  --info:       #93c5fd;
+  --success-bg: #11201a;
+  --warning-bg: #221a10;
+  --danger-bg:  #221216;
+  --info-bg:    #0f1d28;
+
+  /* Secondary register — soft violet, scoped to "decision" */
+  --violet-500: #c4b5fd;
+  --violet-100: #1b1b2e;
+
+  /* Shadows — voids beneath cards + 1px hairline highlight */
+  --shadow-1: 0 1px 0 rgba(220,232,255,0.025) inset,
+              0 1px 2px rgba(0,0,0,0.4);
+  --shadow-2: 0 1px 0 rgba(220,232,255,0.035) inset,
+              0 2px 8px rgba(0,0,0,0.5),
+              0 16px 32px -16px rgba(0,0,0,0.65);
+}
+
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  transition: background .25s var(--ease-out, ease), color .25s var(--ease-out, ease);
+}
+
+/* Theme toggle button — minimalist sun/moon swap */
+.theme-toggle-btn {
+  background: var(--bone);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md, 6px);
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--mid);
+  transition: color .14s, border-color .14s, background .14s;
+}
+.theme-toggle-btn:hover { color: var(--ink); border-color: var(--mid); }
+.theme-toggle-btn svg { width: 14px; height: 14px; }
+.theme-toggle-btn .sun  { display: inline; }
+.theme-toggle-btn .moon { display: none; }
+[data-theme="dark"] .theme-toggle-btn .sun  { display: none; }
+[data-theme="dark"] .theme-toggle-btn .moon { display: inline; }

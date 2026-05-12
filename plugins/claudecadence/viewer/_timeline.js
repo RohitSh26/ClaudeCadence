@@ -950,10 +950,26 @@
     }
   }
 
+  // v2.2: decision detection. A node is a "decision" if any of:
+  //   - kind === 'decision' (explicit hook capture)
+  //   - tags include 'decision'
+  //   - status === 'decision' (legacy)
+  //   - it's a prompt and the title contains a decision-verb
+  const DECISION_VERBS = /\b(decide|chose|chosen|use(?!\sthe)|go with|pick|ship|skip|kill|drop|merge|deploy|approve|reject|defer)\b/i;
+  function isDecision(n) {
+    if (!n) return false;
+    if (n.kind === 'decision' || n.status === 'decision') return true;
+    if ((n.tags || []).indexOf('decision') !== -1) return true;
+    if ((n.tags || []).indexOf('prompt') !== -1 && DECISION_VERBS.test(n.title || '')) return true;
+    return false;
+  }
+  let decisionsOnly = false;
+
   function matches(n) {
     if (activeStatus !== 'all' && n.status !== activeStatus) return false;
     if (activeAgent  !== 'all' && n.agent  !== activeAgent)  return false;
     if (activeSession !== 'all' && (n.session || 'main') !== activeSession) return false;
+    if (decisionsOnly && !isDecision(n)) return false;
     const bounds = timeBoundsForFilter();
     if (bounds && n.ts) {
       const t = new Date(n.ts).getTime();
@@ -1193,6 +1209,45 @@
   function childTargetText(c) {
     // Pick the most useful one-line target string for the row.
     return (c.title || c.summary || '').trim();
+  }
+
+  // v2.2: shared child-row factory. Renders fork/merge tints, paired-id
+  // badge, file-edit diff badge (+N −M), failure styling.
+  function childRow(c) {
+    const row = el('div','child-row');
+    if (c.kind === 'fork')  row.classList.add('is-fork');
+    if (c.kind === 'merge') row.classList.add('is-merge');
+
+    const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
+    const tg  = el('span','target'); tg.textContent  = childTargetText(c);
+    const me  = el('span','meta');
+    if (c.status === 'failed') me.classList.add('fail');
+
+    // File-edit diff badge — visible inline when the hook captured deltas.
+    if (typeof c.lines_added === 'number' || typeof c.lines_removed === 'number') {
+      const parts = [];
+      if (c.lines_added)   parts.push('<span class="add">+' + c.lines_added + '</span>');
+      if (c.lines_removed) parts.push('<span class="del">−' + c.lines_removed + '</span>');
+      if (parts.length) {
+        const diff = el('span','diff'); diff.innerHTML = parts.join(' ');
+        diff.title = 'lines added / removed in this edit';
+        row.appendChild(diff);
+      }
+    }
+
+    // Paired dispatch id badge (fork↔merge match).
+    if (c.source_tool_use_id) {
+      const tuid = el('span','tuid');
+      tuid.title = 'paired dispatch id: ' + c.source_tool_use_id;
+      tuid.textContent = '↔ ' + c.source_tool_use_id.slice(-6);
+      row.appendChild(tuid);
+    }
+
+    me.textContent = c.agent || '';
+    row.appendChild(ts);
+    row.appendChild(tg);
+    row.appendChild(me);
+    return row;
   }
 
   function turnSummary(turn) {
@@ -1649,22 +1704,7 @@
 
         const groupBody = el('div','child-group-body');
         visible.forEach(c => {
-          const row = el('div','child-row');
-          if (c.kind === 'fork')  row.classList.add('is-fork');
-          if (c.kind === 'merge') row.classList.add('is-merge');
-          const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
-          const tg  = el('span','target'); tg.textContent  = childTargetText(c);
-          const me  = el('span','meta');   me.textContent  = c.agent || '';
-          if (c.status === 'failed') me.classList.add('fail');
-          // Show source_tool_use_id as a paired-id badge — the renderer's
-          // visual cue that fork↔merge are part of the same dispatch.
-          if (c.source_tool_use_id) {
-            const tuid = el('span','tuid');
-            tuid.title = 'paired dispatch id: ' + c.source_tool_use_id;
-            tuid.textContent = '↔ ' + c.source_tool_use_id.slice(-6);
-            row.appendChild(tuid);
-          }
-          row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
+          const row = childRow(c);
           groupBody.appendChild(row);
         });
         if (items.length > 5 && !showAll) {
@@ -1679,23 +1719,7 @@
             expandedShowAll.add(groupKey);
             expandedChildGroups.add(groupKey);
             const newBody = el('div','child-group-body');
-            items.forEach(c => {
-              const row = el('div','child-row');
-              if (c.kind === 'fork')  row.classList.add('is-fork');
-              if (c.kind === 'merge') row.classList.add('is-merge');
-              const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
-              const tg  = el('span','target'); tg.textContent  = childTargetText(c);
-              const me  = el('span','meta');   me.textContent  = c.agent || '';
-              if (c.status === 'failed') me.classList.add('fail');
-              if (c.source_tool_use_id) {
-                const tuid = el('span','tuid');
-                tuid.title = 'paired dispatch id: ' + c.source_tool_use_id;
-                tuid.textContent = '↔ ' + c.source_tool_use_id.slice(-6);
-                row.appendChild(tuid);
-              }
-              row.appendChild(ts); row.appendChild(tg); row.appendChild(me);
-              newBody.appendChild(row);
-            });
+            items.forEach(c => { newBody.appendChild(childRow(c)); });
             groupBody.replaceWith(newBody);
           });
           groupBody.appendChild(more);
@@ -1761,6 +1785,9 @@
 
     // header counts
     document.getElementById('meta-count').textContent = visible.length;
+    // v2.2: decisions count on the pin button
+    const decBtnCount = document.getElementById('btn-decisions-count');
+    if (decBtnCount) decBtnCount.textContent = allNodes.filter(isDecision).length;
     if (allNodes.length) {
       const first = new Date(allNodes[0].ts), last = new Date(allNodes[allNodes.length-1].ts);
       const ms = isNaN(first) || isNaN(last) ? 0 : (last - first);
@@ -1951,6 +1978,16 @@
     document.getElementById('btn-expand-all').addEventListener('click', () => {
       document.querySelectorAll('details.card').forEach(d => d.open = true);
     });
+    // v2.2 — Decisions filter pin
+    const decBtn = document.getElementById('btn-decisions');
+    if (decBtn) {
+      decBtn.addEventListener('click', () => {
+        decisionsOnly = !decisionsOnly;
+        decBtn.classList.toggle('is-active', decisionsOnly);
+        decBtn.setAttribute('aria-pressed', String(decisionsOnly));
+        render();
+      });
+    }
     document.getElementById('view-mode').addEventListener('click', e => {
       const btn = e.target.closest('button[data-mode]');
       if (!btn) return;
