@@ -346,16 +346,23 @@
 
   <div class="summary-row" id="summary-row"></div>
 
+  <div class="hub-heatmap-wrap">
+    <div class="hub-heatmap-head">Activity heatmap · 14d</div>
+    <div id="heatmap" class="hub-heatmap">—</div>
+  </div>
+
   <div class="hub-filter">
     <div class="group" id="filter-status">
       <span class="group-label">show</span>
     </div>
     <div class="search">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="m11 11 3 3"/></svg>
-      <input type="text" id="search" placeholder="Search by name or path…">
+      <input type="text" id="search" placeholder="Search names, paths, or session content…">
       <kbd>⌘K</kbd>
     </div>
   </div>
+
+  <div id="search-results" class="search-results"></div>
 
   <div class="cadence-list" id="cadence-list">
     <div class="empty">

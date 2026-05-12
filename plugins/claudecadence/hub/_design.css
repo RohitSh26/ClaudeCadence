@@ -2178,3 +2178,142 @@ html, body {
 .theme-toggle-btn .moon { display: none; }
 [data-theme="dark"] .theme-toggle-btn .sun  { display: none; }
 [data-theme="dark"] .theme-toggle-btn .moon { display: inline; }
+
+/* ───────────────────────────────────────────────────────────────────
+   v2.2 — Hub activity heatmap (7 days × 24 hours, last 14d window)
+   ─────────────────────────────────────────────────────────── */
+.hub-heatmap-wrap {
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md, 6px);
+  padding: 16px 18px;
+  background: var(--paper);
+  margin: 0 0 20px;
+}
+.hub-heatmap-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--mid);
+  margin-bottom: 10px;
+}
+.hub-heatmap .hm-grid {
+  display: grid;
+  grid-template-columns: 26px repeat(24, 1fr);
+  gap: 2px;
+}
+.hub-heatmap .hm-corner { background: transparent; }
+.hub-heatmap .hm-h, .hub-heatmap .hm-d {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--neutral-400);
+  text-align: center;
+  align-self: center;
+}
+.hub-heatmap .hm-d { text-align: right; padding-right: 4px; }
+.hub-heatmap .hm-cell {
+  background: var(--apricot-500);
+  border-radius: 2px;
+  aspect-ratio: 1 / 1;
+  min-height: 12px;
+}
+.hub-heatmap .hm-empty {
+  font-family: var(--font-serif); font-style: italic;
+  color: var(--mid); font-size: 13px;
+}
+.hub-heatmap .hm-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-400);
+}
+.hub-heatmap .hm-legend .hm-scale {
+  display: inline-flex; gap: 3px; align-items: center;
+}
+.hub-heatmap .hm-legend .hm-scale i {
+  display: inline-block;
+  width: 10px; height: 10px;
+  background: var(--apricot-500);
+  border-radius: 2px;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   v2.2 — Cross-project search results
+   ─────────────────────────────────────────────────────────── */
+.search-results { margin: 0 0 16px; }
+.search-results.is-active {
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-md, 6px);
+  background: var(--paper);
+  overflow: hidden;
+}
+.search-results .sr-head {
+  padding: 10px 14px;
+  background: var(--bone);
+  border-bottom: 1px solid var(--soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mid);
+  letter-spacing: 0.04em;
+}
+.search-results .sr-empty {
+  padding: 14px;
+  font-family: var(--font-serif); font-style: italic;
+  color: var(--mid); font-size: 13px;
+}
+.search-results .sr-group { border-bottom: 1px solid var(--soft); }
+.search-results .sr-group:last-child { border-bottom: none; }
+.search-results .sr-group-head {
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--apricot-600);
+  display: flex; align-items: center; gap: 8px;
+}
+.search-results .sr-group-head .sr-count {
+  background: var(--bone);
+  border: 1px solid var(--soft);
+  border-radius: var(--radius-pill, 9999px);
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--neutral-700);
+}
+.search-results .sr-hit {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+  padding: 6px 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: background .14s;
+  border-top: 1px solid var(--soft);
+}
+.search-results .sr-hit:hover { background: var(--bone); }
+.search-results .sr-hit .sr-when {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--neutral-400);
+  text-align: right;
+}
+.search-results .sr-hit .sr-title {
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   v2.2 — Mobile
+   ─────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .hub { padding: 20px 14px 64px; }
+  .hub-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .hub-head h1 { font-size: 24px; }
+  .hub-heatmap .hm-grid { grid-template-columns: 22px repeat(24, 1fr); gap: 1px; }
+  .hub-heatmap .hm-cell { min-height: 8px; }
+  .hub-filter { flex-wrap: wrap; gap: 10px; }
+  .search-results .sr-hit { grid-template-columns: 60px 1fr; gap: 8px; padding: 6px 10px; }
+}
