@@ -3875,36 +3875,64 @@ details.code-collapsible > pre { margin: 0; }
 /* ────────────────────────────────────────────────────────────────────────
    v2.3 — expandable child rows. When a Write/Edit node carries a diff
    code block, the row is rendered as a <details> so users can click to
-   see what changed inline, without leaving the turn card.
+   see what changed inline.
+
+   IMPORTANT: the existing `.child-group-body .child-row` selector applies
+   `display: grid` to the row. When the row is a <details>, the grid items
+   live inside the <summary>, not directly under <details> — so we have to
+   undo the grid on the <details> and move it onto the <summary>.
    ──────────────────────────────────────────────────────────────────────── */
-details.child-row {
-  list-style: none;
+.child-group-body details.child-row {
+  display: block;          /* override the grid inherited from .child-row */
+  padding: 0;
+  background: transparent;
 }
-details.child-row > summary {
-  list-style: none;
+.child-group-body details.child-row > summary.child-row-summary {
+  display: grid;
+  grid-template-columns: 18px 56px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 14px;
   cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-700);
 }
-details.child-row > summary::-webkit-details-marker { display: none; }
-details.child-row.is-expandable > summary.child-row-summary::before {
+.child-group-body details.child-row > summary::-webkit-details-marker { display: none; }
+.child-group-body details.child-row > summary.child-row-summary::before {
   content: '▸';
   display: inline-block;
-  width: 12px;
   color: var(--mid);
   font-size: 9px;
+  line-height: 14px;
   transition: transform 120ms ease;
-  margin-right: 2px;
+  justify-self: center;
 }
-details.child-row.is-expandable[open] > summary.child-row-summary::before {
+.child-group-body details.child-row[open] > summary.child-row-summary::before {
   transform: rotate(90deg);
 }
-details.child-row > .child-row-body {
-  padding: 8px 12px 12px 26px;
-  background: color-mix(in oklab, var(--surface) 92%, transparent);
-  border-left: 2px solid var(--border-weak, var(--border));
-  margin: 4px 0 6px 8px;
+.child-group-body details.child-row > summary.child-row-summary:hover { background: var(--bone); }
+/* The body sits below the summary as a normal flow block. The dashed left
+   border keeps a visual link to the parent row without dominating the card. */
+.child-group-body details.child-row > .child-row-body {
+  margin: 6px 14px 10px 30px;
+  padding: 0;
+  border-left: 2px solid var(--soft, var(--border));
+  padding-left: 12px;
 }
-details.child-row > .child-row-body > .block {
-  margin-top: 0;
-  margin-bottom: 8px;
+.child-group-body details.child-row > .child-row-body > .block {
+  margin: 0 0 8px 0;
 }
-details.child-row > .child-row-body > .block:last-child { margin-bottom: 0; }
+.child-group-body details.child-row > .child-row-body > .block:last-child { margin-bottom: 0; }
+/* Reduce the code-slab visual weight inside child rows — keep the existing
+   terminal palette but trim padding and shave the top radius so it reads as
+   an inset detail, not a floating panel. */
+.child-group-body details.child-row > .child-row-body .block.code {
+  border-radius: 6px;
+}
+.child-group-body details.child-row > .child-row-body .block.code pre {
+  padding: 10px 12px;
+  font-size: 11.5px;
+}
+/* Existing fork/merge tints applied via .child-row also work here. */
