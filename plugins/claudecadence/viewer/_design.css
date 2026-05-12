@@ -3812,10 +3812,16 @@ body { line-height: 1.65; }
    v2.3 diff coloring + collapsible code blocks.
    No external highlighter — just per-line spans the renderer produces.
    ──────────────────────────────────────────────────────────────────────── */
-.block.code pre code .diff-add  { color: var(--success); background: color-mix(in oklab, var(--success) 8%, transparent); display: inline-block; width: 100%; }
-.block.code pre code .diff-del  { color: var(--danger);  background: color-mix(in oklab, var(--danger) 8%, transparent);  display: inline-block; width: 100%; }
+/* Diff line coloring — spans stay inline so the parent <pre>'s `\n` between
+   them naturally breaks each line. Full-width tinting is achieved via the
+   background extending to the line end, not via inline-block. v2.3.3. */
+.block.code pre code .diff-add  { color: var(--success);    background: color-mix(in oklab, var(--success) 12%, transparent); }
+.block.code pre code .diff-del  { color: var(--danger);     background: color-mix(in oklab, var(--danger) 12%, transparent); }
 .block.code pre code .diff-hunk { color: var(--apricot-600); font-weight: 500; }
 .block.code pre code .diff-meta { color: var(--mid); }
+/* Ensure the <pre> wraps long lines so users on narrow viewports see the
+   full content instead of horizontal scroll. */
+.block.code pre { white-space: pre-wrap; word-break: break-word; }
 
 details.code-collapsible {
   margin: 6px 0;

@@ -562,17 +562,25 @@
     const code = document.createElement('code');
     if (lang) code.className = 'lang-' + lang;
     if (lang === 'diff') {
-      // Per-line spans so we can color +/− without a real highlighter.
-      lines.forEach((ln, i) => {
-        const span = document.createElement('span');
+      // Build one HTML string with real \n between spans, then set innerHTML
+      // once. <pre> preserves the newlines so each diff line lands on its own
+      // visual row. The earlier per-line `<span style="display:inline-block;
+      // width:100%">…\n</span>` pattern was broken — the trailing newline was
+      // captured INSIDE the inline-block (instead of between siblings), so
+      // depending on white-space inheritance the lines could collapse onto
+      // a single horizontally-scrolling row. v2.3.3.
+      const parts = lines.map(ln => {
         const ch = ln.charAt(0);
-        if (ch === '+' && !ln.startsWith('+++')) span.className = 'diff-add';
-        else if (ch === '-' && !ln.startsWith('---')) span.className = 'diff-del';
-        else if (ln.startsWith('@@')) span.className = 'diff-hunk';
-        else if (ln.startsWith('+++') || ln.startsWith('---')) span.className = 'diff-meta';
-        span.textContent = ln + (i < lines.length - 1 ? '\n' : '');
-        code.appendChild(span);
+        let cls = '';
+        if (ch === '+' && !ln.startsWith('+++')) cls = 'diff-add';
+        else if (ch === '-' && !ln.startsWith('---')) cls = 'diff-del';
+        else if (ln.startsWith('@@')) cls = 'diff-hunk';
+        else if (ln.startsWith('+++') || ln.startsWith('---')) cls = 'diff-meta';
+        return cls
+          ? '<span class="' + cls + '">' + escapeHtml(ln) + '</span>'
+          : escapeHtml(ln);
       });
+      code.innerHTML = parts.join('\n');
     } else {
       const hl = lang ? HL.highlight(value, lang) : null;
       if (hl) code.innerHTML = hl;
