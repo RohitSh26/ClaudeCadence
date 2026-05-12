@@ -3871,3 +3871,40 @@ details.code-collapsible > pre { margin: 0; }
 .block.markdown pre code .tok-pr  { color: var(--sage-500, var(--sage-400)); }
 .block.markdown pre code .tok-tg  { color: var(--info); }
 .block.markdown pre code .tok-at  { color: var(--apricot-500, var(--apricot-600)); }
+
+/* ────────────────────────────────────────────────────────────────────────
+   v2.3 — expandable child rows. When a Write/Edit node carries a diff
+   code block, the row is rendered as a <details> so users can click to
+   see what changed inline, without leaving the turn card.
+   ──────────────────────────────────────────────────────────────────────── */
+details.child-row {
+  list-style: none;
+}
+details.child-row > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.child-row > summary::-webkit-details-marker { display: none; }
+details.child-row.is-expandable > summary.child-row-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  color: var(--mid);
+  font-size: 9px;
+  transition: transform 120ms ease;
+  margin-right: 2px;
+}
+details.child-row.is-expandable[open] > summary.child-row-summary::before {
+  transform: rotate(90deg);
+}
+details.child-row > .child-row-body {
+  padding: 8px 12px 12px 26px;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  border-left: 2px solid var(--border-weak, var(--border));
+  margin: 4px 0 6px 8px;
+}
+details.child-row > .child-row-body > .block {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+details.child-row > .child-row-body > .block:last-child { margin-bottom: 0; }

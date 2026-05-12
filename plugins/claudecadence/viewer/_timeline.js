@@ -1453,9 +1453,19 @@
   // v2.2: shared child-row factory. Renders fork/merge tints, paired-id
   // badge, file-edit diff badge (+N −M), failure styling.
   function childRow(c) {
-    const row = el('div','child-row');
-    if (c.kind === 'fork')  row.classList.add('is-fork');
-    if (c.kind === 'merge') row.classList.add('is-merge');
+    // v2.3: child rows are now <details> when the node has blocks — clicking
+    // the row reveals the diff / code preview inline. Compact summary row
+    // stays exactly as before; the new content is only added when blocks
+    // exist so simple bash/read rows remain flat.
+    const hasBlocks = Array.isArray(c.blocks) && c.blocks.length > 0;
+    const root = hasBlocks ? document.createElement('details') : document.createElement('div');
+    root.className = 'child-row';
+    if (hasBlocks) root.classList.add('is-expandable');
+    if (c.kind === 'fork')  root.classList.add('is-fork');
+    if (c.kind === 'merge') root.classList.add('is-merge');
+
+    const row = hasBlocks ? document.createElement('summary') : root;
+    if (hasBlocks) row.className = 'child-row-summary';
 
     const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
     const tg  = el('span','target'); tg.textContent  = childTargetText(c);
@@ -1486,7 +1496,20 @@
     row.appendChild(ts);
     row.appendChild(tg);
     row.appendChild(me);
-    return row;
+
+    if (hasBlocks) {
+      root.appendChild(row);
+      const body = document.createElement('div');
+      body.className = 'child-row-body';
+      c.blocks.forEach(b => {
+        const r = renderers[b.type];
+        if (r) body.appendChild(r(b));
+        else body.appendChild(el('div','block','⚠ unknown block type: ' + b.type));
+      });
+      root.appendChild(body);
+      return root;
+    }
+    return root;
   }
 
   function turnSummary(turn) {
