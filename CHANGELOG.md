@@ -2,6 +2,26 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
+## [2.3.0] – 2026-05-12
+
+### Added
+- **Stable layout** — the viewer now splits the timeline into an *active zone* (top, the current prompt+response, the only card that re-renders on poll) and a *frozen history zone* below a divider. Older turns render once and never re-render — eliminates the "fidgety" feel where every 5s rebuild collapsed open cards and reflowed the page.
+- **File path + unified-diff in Write/Edit cards** — `Edit` and `MultiEdit` emit a `diff`-lang code block reconstructed from `old_string`/`new_string`; `Write` and `NotebookEdit` emit a language-detected preview (first 80 lines). Cards now answer "what files and what changed" at a glance.
+- **Built-in syntax highlighter** — tiny token-based engine (~150 LOC, zero deps) covering JavaScript/TypeScript/JSX/TSX, Python, Bash, JSON, YAML, Go, Rust, Java/Kotlin, SQL, HTML/XML, CSS/SCSS. Hooks into both `renderCode` and `simpleMd` fenced blocks. Palette uses existing theme tokens, so dark/light inherit automatically.
+- **Collapsible code blocks** — blocks longer than 12 lines auto-wrap in a `<details>` with "show N lines · lang" summary. Diff coloring is rendered inline (`+`/`−` lines tinted) without a highlighter pass.
+- **Long-title tooltips** — truncated card titles now expose the full title via the native `title` attribute on hover.
+
+### Fixed
+- **Bug B — mid-stream interrupt.** When the user submits prompt #2 before Stop fires for prompt #1, prompt #1's response no longer absorbs prompt #2's content. `firstAssistantTextAfter` accepts an `upperBound` ts (the next pending turn's UPS lower-bound), capping collection at the strict turn boundary even before user-2's transcript entry physically lands. Six new tests in `test/midstream.test.js`.
+- **Premature orchestrator response synthesis** — `deriveCatchUpNodes` no longer emits a partial response for the *active* prompt while sub-agent dispatches are still streaming in. A response is synthesized only when the prompt is no longer the latest OR its last assistant entry is older than 30 s. Stops the in-flight cluster from emitting fresh-but-stale "Claude responded" rows.
+- **Malformed `nodes.js` recovery** — corrupt JSON or missing marker now rotates the file to `nodes.js.bak` (keeps last 3 backups) and starts fresh, instead of silently returning `[]` and overwriting on next save.
+- **CI** — `node --check` step removed; bash bins `cadence-start` / `cadence-stop` were tripping it. `test/syntax.test.js` already covers the real JS bins via `npm test`.
+
+### Changed
+- `renderCode` rewritten to emit `<code>` with `lang-<x>` class, run through `HL.highlight()`, and optionally wrap in `<details>` when the block is long. Diff is special-cased with per-line spans.
+- `simpleMd` fenced-code blocks now pass through the same highlighter when a language is specified.
+- Poll loop calls `render({ fromPoll: true })` so the active/history split is preserved; filter / mode / hash changes call plain `render()` and trigger a full rebuild via `invalidateFrozenLayout()`.
+
 ## [2.2.0] – 2026-05-12
 
 ### Added

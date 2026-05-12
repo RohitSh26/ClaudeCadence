@@ -47,6 +47,22 @@
   const expandedChildGroups = new Set();      // v1.8: which (turn:tool) child groups are expanded
   const expandedShowAll     = new Set();      // v1.8: which (turn:tool) child groups have "show all"
 
+  // v2.3 stable-layout: only the newest turn re-renders on poll. Completed
+  // turns are appended to a frozen "history" zone once and never re-render —
+  // this kills the fidgety feel where every 5s rebuild collapsed open cards
+  // and shifted the page. Filter / mode / search changes invalidate the
+  // frozen set so the layout fully rebuilds.
+  const frozenTurnIds = new Set();
+  let activeZoneEl = null;
+  let historyZoneEl = null;
+  let layoutDividerEl = null;
+  function invalidateFrozenLayout() {
+    frozenTurnIds.clear();
+    activeZoneEl = null;
+    historyZoneEl = null;
+    layoutDividerEl = null;
+  }
+
   const TIME_PRESETS_MS = {
     '1h':  60 * 60 * 1000,
     '24h': 24 * 60 * 60 * 1000,
@@ -78,6 +94,184 @@
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  // v2.3 — tiny built-in syntax highlighter. No third-party dep (Prism /
+  // highlight.js would add ~20KB+ and a license entry); this is ~150 lines
+  // covering the languages users typically see in Claude Code transcripts.
+  // Token-based: each language is an ordered list of { re, cls }. We build
+  // one combined regex per call, walk matches, emit <span class="tok-X">.
+  // Anything not matched is escaped raw text. Stable: rules are ordered so
+  // comments and strings win over keywords-inside-them.
+  const HL = (function () {
+    const C = {
+      cmt:'tok-cmt', str:'tok-str', kw:'tok-kw', num:'tok-num',
+      fn:'tok-fn',  ty:'tok-ty',  bo:'tok-bo',  pr:'tok-pr',
+      tg:'tok-tg',  at:'tok-at',  op:'tok-op',
+    };
+    const kwre = (list) => new RegExp('\\b(?:' + list.join('|') + ')\\b');
+    const STR_TRIPLE = /"""[\s\S]*?"""|'''[\s\S]*?'''/;
+    const STR_BT = /`(?:\\.|[^`\\])*`/;
+    const STR_DBL = /"(?:\\.|[^"\\])*"/;
+    const STR_SGL = /'(?:\\.|[^'\\])*'/;
+    const NUM = /\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/;
+
+    const JS_KW = ['async','await','break','case','catch','class','const','continue','debugger','default','delete','do','else','export','extends','finally','for','from','function','if','import','in','instanceof','let','new','of','return','static','super','switch','this','throw','try','typeof','var','void','while','with','yield','as','interface','type','enum','implements','public','private','protected','readonly'];
+    const JS_TY = ['Array','Boolean','Date','Error','Function','JSON','Math','Number','Object','Promise','RegExp','Set','String','Map','Symbol'];
+    const JS_BO = ['true','false','null','undefined'];
+    const js = [
+      { re: /\/\/[^\n]*/, cls: C.cmt },
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: STR_BT, cls: C.str }, { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+      { re: kwre(JS_BO), cls: C.bo },
+      { re: kwre(JS_KW), cls: C.kw },
+      { re: kwre(JS_TY), cls: C.ty },
+      { re: NUM, cls: C.num },
+      { re: /\b[A-Za-z_$][\w$]*(?=\s*\()/, cls: C.fn },
+    ];
+
+    const PY_KW = ['and','as','assert','async','await','break','class','continue','def','del','elif','else','except','finally','for','from','global','if','import','in','is','lambda','nonlocal','not','or','pass','raise','return','try','while','with','yield','match','case'];
+    const PY_BO = ['True','False','None'];
+    const PY_TY = ['int','float','str','bytes','list','dict','tuple','set','frozenset','bool','object','type'];
+    const py = [
+      { re: /#[^\n]*/, cls: C.cmt },
+      { re: STR_TRIPLE, cls: C.str },
+      { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+      { re: kwre(PY_BO), cls: C.bo },
+      { re: kwre(PY_KW), cls: C.kw },
+      { re: kwre(PY_TY), cls: C.ty },
+      { re: NUM, cls: C.num },
+      { re: /@[A-Za-z_][\w]*/, cls: C.at },
+      { re: /\b[A-Za-z_][\w]*(?=\s*\()/, cls: C.fn },
+    ];
+
+    const BASH_KW = ['if','then','elif','else','fi','case','esac','for','while','until','do','done','in','function','return','local','export','readonly','declare','set','unset','source'];
+    const BASH_BI = ['echo','printf','cd','pwd','ls','cat','grep','sed','awk','find','rm','cp','mv','mkdir','touch','chmod','chown','curl','wget','git','npm','node','python','pip'];
+    const bash = [
+      { re: /#[^\n]*/, cls: C.cmt },
+      { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+      { re: kwre(BASH_KW), cls: C.kw },
+      { re: kwre(BASH_BI), cls: C.fn },
+      { re: /\$\{[^}]+\}|\$[\w@*?#!$]+/, cls: C.at },
+      { re: NUM, cls: C.num },
+    ];
+
+    const json = [
+      { re: /"(?:\\.|[^"\\])*"(?=\s*:)/, cls: C.pr },
+      { re: STR_DBL, cls: C.str },
+      { re: /\b(?:true|false|null)\b/, cls: C.bo },
+      { re: /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, cls: C.num },
+    ];
+
+    const yaml = [
+      { re: /#[^\n]*/, cls: C.cmt },
+      { re: /^\s*[A-Za-z0-9_.-]+(?=\s*:)/m, cls: C.pr },
+      { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+      { re: /\b(?:true|false|null|yes|no|on|off)\b/i, cls: C.bo },
+      { re: NUM, cls: C.num },
+    ];
+
+    const GO_KW = ['break','case','chan','const','continue','default','defer','else','fallthrough','for','func','go','goto','if','import','interface','map','package','range','return','select','struct','switch','type','var'];
+    const GO_TY = ['bool','byte','complex64','complex128','error','float32','float64','int','int8','int16','int32','int64','rune','string','uint','uint8','uint16','uint32','uint64','uintptr'];
+    const go = [
+      { re: /\/\/[^\n]*/, cls: C.cmt },
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: STR_BT, cls: C.str }, { re: STR_DBL, cls: C.str },
+      { re: /\b(?:true|false|nil|iota)\b/, cls: C.bo },
+      { re: kwre(GO_KW), cls: C.kw },
+      { re: kwre(GO_TY), cls: C.ty },
+      { re: NUM, cls: C.num },
+      { re: /\b[A-Za-z_][\w]*(?=\s*\()/, cls: C.fn },
+    ];
+
+    const RUST_KW = ['as','async','await','break','const','continue','crate','dyn','else','enum','extern','fn','for','if','impl','in','let','loop','match','mod','move','mut','pub','ref','return','self','Self','static','struct','super','trait','type','unsafe','use','where','while'];
+    const RUST_TY = ['bool','char','f32','f64','i8','i16','i32','i64','i128','isize','str','u8','u16','u32','u64','u128','usize','Vec','String','Option','Result','Box','Rc','Arc'];
+    const rust = [
+      { re: /\/\/[^\n]*/, cls: C.cmt },
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: STR_DBL, cls: C.str },
+      { re: /\b(?:true|false|None|Some|Ok|Err)\b/, cls: C.bo },
+      { re: kwre(RUST_KW), cls: C.kw },
+      { re: kwre(RUST_TY), cls: C.ty },
+      { re: NUM, cls: C.num },
+      { re: /\b[A-Za-z_][\w]*!/, cls: C.fn },
+    ];
+
+    const JAVA_KW = ['abstract','assert','break','case','catch','class','const','continue','default','do','else','enum','extends','final','finally','for','if','implements','import','instanceof','interface','native','new','package','private','protected','public','return','static','strictfp','super','switch','synchronized','this','throw','throws','transient','try','volatile','while','var','record','sealed','permits','yield'];
+    const JAVA_TY = ['boolean','byte','char','double','float','int','long','short','void','String','Object','Integer','Long','Double','Boolean','List','Map','Set'];
+    const java = [
+      { re: /\/\/[^\n]*/, cls: C.cmt },
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: STR_DBL, cls: C.str },
+      { re: /\b(?:true|false|null)\b/, cls: C.bo },
+      { re: kwre(JAVA_KW), cls: C.kw },
+      { re: kwre(JAVA_TY), cls: C.ty },
+      { re: NUM, cls: C.num },
+      { re: /@[A-Za-z_][\w]*/, cls: C.at },
+      { re: /\b[A-Za-z_][\w]*(?=\s*\()/, cls: C.fn },
+    ];
+
+    const SQL_KW = ['SELECT','FROM','WHERE','GROUP','BY','ORDER','HAVING','LIMIT','OFFSET','INSERT','INTO','VALUES','UPDATE','SET','DELETE','CREATE','TABLE','INDEX','VIEW','ALTER','DROP','JOIN','LEFT','RIGHT','INNER','OUTER','ON','AS','AND','OR','NOT','NULL','IS','IN','LIKE','BETWEEN','UNION','ALL','DISTINCT','COUNT','SUM','AVG','MIN','MAX','CASE','WHEN','THEN','ELSE','END','WITH'];
+    const sql = [
+      { re: /--[^\n]*/, cls: C.cmt },
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: STR_SGL, cls: C.str },
+      { re: new RegExp('\\b(?:' + SQL_KW.join('|') + ')\\b', 'i'), cls: C.kw },
+      { re: NUM, cls: C.num },
+    ];
+
+    const html = [
+      { re: /<!--[\s\S]*?-->/, cls: C.cmt },
+      { re: /<\/?[a-zA-Z][^>\s]*/, cls: C.tg },
+      { re: /\b[a-zA-Z-]+(?==)/, cls: C.at },
+      { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+    ];
+
+    const css = [
+      { re: /\/\*[\s\S]*?\*\//, cls: C.cmt },
+      { re: /[#.][\w-]+|::?[\w-]+/, cls: C.tg },
+      { re: /\b[a-z-]+(?=\s*:)/i, cls: C.pr },
+      { re: STR_DBL, cls: C.str }, { re: STR_SGL, cls: C.str },
+      { re: /#[\da-fA-F]{3,8}\b/, cls: C.num },
+      { re: NUM, cls: C.num },
+    ];
+
+    const map = {
+      javascript: js, js: js, jsx: js, typescript: js, ts: js, tsx: js,
+      python: py, py: py,
+      bash: bash, sh: bash, shell: bash, zsh: bash,
+      json: json,
+      yaml: yaml, yml: yaml,
+      go: go, golang: go,
+      rust: rust, rs: rust,
+      java: java, kotlin: java,
+      sql: sql,
+      html: html, xml: html,
+      css: css, scss: css,
+    };
+
+    function highlight(text, lang) {
+      const rules = map[(lang || '').toLowerCase()];
+      if (!rules) return null;
+      const combined = new RegExp(rules.map(r => '(' + r.re.source + ')').join('|'), rules.some(r => r.re.flags.includes('m')) ? 'gm' : 'g');
+      const out = [];
+      let last = 0, m;
+      while ((m = combined.exec(text)) !== null) {
+        if (m.index > last) out.push(escapeHtml(text.slice(last, m.index)));
+        for (let i = 1; i < m.length; i++) {
+          if (m[i] !== undefined) {
+            out.push('<span class="' + rules[i - 1].cls + '">' + escapeHtml(m[i]) + '</span>');
+            break;
+          }
+        }
+        last = m.index + m[0].length;
+        if (m[0].length === 0) combined.lastIndex++;
+      }
+      if (last < text.length) out.push(escapeHtml(text.slice(last)));
+      return out.join('');
+    }
+
+    return { highlight };
+  })();
   function chevronSvg() {
     return '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 2 4 4-4 4"/></svg>';
   }
@@ -206,9 +400,13 @@
         i += 1;
         while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i += 1; }
         i += 1;
+        const raw = buf.join('\n');
+        const hl = lang ? HL.highlight(raw, lang) : null;
+        const codeHtml = hl != null ? hl : escapeHtml(raw);
         out.push(
-          '<pre' + (lang ? ` data-lang="${escapeHtml(lang)}"` : '') + '><code>' +
-          escapeHtml(buf.join('\n')) +
+          '<pre' + (lang ? ` data-lang="${escapeHtml(lang)}"` : '') + '><code' +
+          (lang ? ` class="lang-${escapeHtml(lang)}"` : '') + '>' +
+          codeHtml +
           '</code></pre>'
         );
         continue;
@@ -349,11 +547,49 @@
   }
   function renderCode(b) {
     const div = el('div','block code');
-    if (b.lang) {
-      const t = el('div','lang-tag'); t.textContent = b.lang; div.appendChild(t);
+    const lang = (b.lang || '').toLowerCase();
+    if (lang) {
+      const t = el('div','lang-tag'); t.textContent = lang; div.appendChild(t);
     }
-    const pre = el('pre'); pre.textContent = b.value || '';
-    div.appendChild(pre);
+    const value = b.value || '';
+    const lines = value.split('\n');
+    // v2.3 — auto-collapse long blocks behind a <details> so very long diffs
+    // / file previews don't dominate the card. Threshold tuned to fit a
+    // normal-density code block on a laptop without scrolling.
+    const COLLAPSE_AT = 12;
+    const longBlock = lines.length > COLLAPSE_AT;
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    if (lang) code.className = 'lang-' + lang;
+    if (lang === 'diff') {
+      // Per-line spans so we can color +/− without a real highlighter.
+      lines.forEach((ln, i) => {
+        const span = document.createElement('span');
+        const ch = ln.charAt(0);
+        if (ch === '+' && !ln.startsWith('+++')) span.className = 'diff-add';
+        else if (ch === '-' && !ln.startsWith('---')) span.className = 'diff-del';
+        else if (ln.startsWith('@@')) span.className = 'diff-hunk';
+        else if (ln.startsWith('+++') || ln.startsWith('---')) span.className = 'diff-meta';
+        span.textContent = ln + (i < lines.length - 1 ? '\n' : '');
+        code.appendChild(span);
+      });
+    } else {
+      const hl = lang ? HL.highlight(value, lang) : null;
+      if (hl) code.innerHTML = hl;
+      else code.textContent = value;
+    }
+    pre.appendChild(code);
+    if (longBlock) {
+      const wrap = document.createElement('details');
+      wrap.className = 'code-collapsible';
+      const sum = document.createElement('summary');
+      sum.textContent = `show ${lines.length} lines` + (lang ? ` · ${lang}` : '');
+      wrap.appendChild(sum);
+      wrap.appendChild(pre);
+      div.appendChild(wrap);
+    } else {
+      div.appendChild(pre);
+    }
     return div;
   }
   function renderDiagram(b) {
@@ -666,7 +902,10 @@
     // ─── Summary (single compact row when closed) ───
     const sum = document.createElement('summary');
     sum.appendChild(el('span','lane-mark'));
-    const h3 = el('h3','title'); h3.textContent = node.title || '(untitled)'; sum.appendChild(h3);
+    const h3 = el('h3','title');
+    h3.textContent = node.title || '(untitled)';
+    if (node.title && node.title.length > 60) h3.title = node.title;
+    sum.appendChild(h3);
 
     const tag = el('span','status-tag');
     tag.appendChild(el('span','dot'));
@@ -1756,31 +1995,110 @@
   }
 
   // ─────────── Render ───────────
-  function render() {
+  // v2.3: stable layout. The newest turn is the only one that re-renders on
+  // poll; older turns sit below a divider in a "frozen" zone that's appended
+  // to exactly once and never touched again. This eliminates the fidgety feel
+  // where the entire page collapsed and re-expanded every 5s.
+  function renderTurnSplit(root, visibleNodes) {
+    const turns = groupIntoTurns(visibleNodes).reverse(); // newest first
+    if (!turns.length) {
+      invalidateFrozenLayout();
+      root.innerHTML = '';
+      root.appendChild(el('div','empty','No nodes match the current filters.'));
+      return;
+    }
+
+    // Lazily create the two zones + the divider between them.
+    if (!activeZoneEl) {
+      root.innerHTML = '';
+      activeZoneEl = document.createElement('section');
+      activeZoneEl.className = 'active-zone';
+      layoutDividerEl = document.createElement('div');
+      layoutDividerEl.className = 'history-divider';
+      layoutDividerEl.innerHTML = '<span class="history-divider-label">past turns</span>';
+      historyZoneEl = document.createElement('section');
+      historyZoneEl.className = 'history-zone';
+      root.appendChild(activeZoneEl);
+      root.appendChild(layoutDividerEl);
+      root.appendChild(historyZoneEl);
+    }
+
+    const active = turns[0];
+    const rest = turns.slice(1);
+
+    // Preserve open state of the active card across re-renders.
+    const openIds = new Set();
+    let turnCardOpen = false;
+    const prev = activeZoneEl.querySelector('details.turn-card');
+    if (prev) {
+      turnCardOpen = prev.open;
+      prev.querySelectorAll('details.card[open]').forEach(d => {
+        const li = d.closest('li.node');
+        if (li && li.dataset.id) openIds.add(li.dataset.id);
+      });
+    }
+
+    activeZoneEl.innerHTML = '';
+    const activeNode = renderTurn(active);
+    activeZoneEl.appendChild(activeNode);
+    if (turnCardOpen && activeNode.matches && activeNode.matches('details.turn-card')) {
+      activeNode.open = true;
+    }
+    openIds.forEach(id => {
+      try {
+        const li = activeNode.querySelector(`li.node[data-id="${CSS.escape(id)}"]`);
+        if (li) {
+          const card = li.querySelector('details.card');
+          if (card) card.open = true;
+        }
+      } catch (_) {}
+    });
+
+    // History: append each not-yet-frozen turn at the TOP of the history
+    // zone (insertBefore firstChild) walking oldest→newest so that the most
+    // recently-demoted turn ends up directly under the divider.
+    layoutDividerEl.style.display = rest.length ? '' : 'none';
+    for (let i = rest.length - 1; i >= 0; i--) {
+      const t = rest[i];
+      if (frozenTurnIds.has(t.id)) continue;
+      const card = renderTurn(t);
+      historyZoneEl.insertBefore(card, historyZoneEl.firstChild);
+      frozenTurnIds.add(t.id);
+    }
+  }
+
+  function render(opts) {
+    opts = opts || {};
+    // Filter / mode / hash changes call render() with no opts → wipe the
+    // frozen-history cache and rebuild from scratch. Only the poll path
+    // passes { fromPoll: true } to keep the incremental layout intact.
+    if (!opts.fromPoll) invalidateFrozenLayout();
+
     const allNodes = (window.TIMELINE_NODES || []).slice().sort((a, b) => {
       if (a.ts === b.ts) return (a.id||'').localeCompare(b.id||'');
       return (a.ts||'').localeCompare(b.ts||'');
     });
     const visible = allNodes.filter(matches);
     const root = document.getElementById('timeline');
-    root.innerHTML = '';
-    if (!visible.length) {
-      root.appendChild(el('div','empty','No nodes match the current filters.'));
-    } else if (activeMode === 'events') {
-      // Raw event log: each node as its own card (v1.0 behavior).
-      visible.forEach(n => root.appendChild(renderNode(n)));
-    } else {
-      // v1.3: detect parallel sessions in the same project. If >1 distinct
-      // session id is present (and the user hasn't filtered to a single one),
-      // render as side-by-side columns. Otherwise single-column turn cards.
-      const sessionIds = Array.from(new Set(visible.map(n => n.session || 'main')));
-      if (sessionIds.length > 1 && activeSession === 'all') {
-        renderMultiSession(root, visible, sessionIds);
+
+    const sessionIds = Array.from(new Set(visible.map(n => n.session || 'main')));
+    const useTurnSplit = visible.length
+      && activeMode !== 'events'
+      && !(sessionIds.length > 1 && activeSession === 'all');
+
+    if (!useTurnSplit) {
+      // Fall back to full rebuild for empty state, events mode, multi-session.
+      invalidateFrozenLayout();
+      root.innerHTML = '';
+      if (!visible.length) {
+        root.appendChild(el('div','empty','No nodes match the current filters.'));
+      } else if (activeMode === 'events') {
+        visible.forEach(n => root.appendChild(renderNode(n)));
       } else {
-        // Latest turn on top — descending chronological order.
-        const turns = groupIntoTurns(visible).reverse();
-        turns.forEach(t => root.appendChild(renderTurn(t)));
+        renderMultiSession(root, visible, sessionIds);
       }
+    } else {
+      renderTurnSplit(root, visible);
     }
 
     // header counts
@@ -1833,22 +2151,11 @@
       try {
         window.TIMELINE_NODES = JSON.parse(m[1]);
       } catch (_) { return; }
-      // Preserve which cards are open across rerenders.
-      const openIds = new Set();
-      document.querySelectorAll('details.card[open]').forEach(d => {
-        const li = d.closest('li.node');
-        if (li && li.dataset.id) openIds.add(li.dataset.id);
-      });
-      render();
-      openIds.forEach(id => {
-        try {
-          const li = document.querySelector(`li.node[data-id="${CSS.escape(id)}"]`);
-          if (li) {
-            const card = li.querySelector('details.card');
-            if (card) card.open = true;
-          }
-        } catch (_) { /* CSS.escape may not exist on very old browsers */ }
-      });
+      // v2.3: stable-layout render. Only the active turn re-renders; the
+      // history zone is preserved across polls. Open-state of the active
+      // card is preserved inside renderTurnSplit; history cards are never
+      // touched so their state is naturally preserved.
+      render({ fromPoll: true });
     } catch (_) { /* fail-soft */ }
   }
 

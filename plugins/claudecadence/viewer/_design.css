@@ -3758,3 +3758,116 @@ body { line-height: 1.65; }
   .workspace .session-strip .actions .pin-btn .label { display: none; }
   .live-meter .version-tag { display: none; }
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   v2.3 stable layout — active turn re-renders on poll; history zone is
+   rendered-once-and-frozen below the divider. Eliminates the fidgety feel
+   where every 5s rebuild collapsed open cards and reflowed the page.
+   ──────────────────────────────────────────────────────────────────────── */
+.active-zone {
+  display: block;
+  /* The active turn often has live updates — give it a subtle "current"
+     accent so users know which card is the one moving. */
+  position: relative;
+}
+.active-zone > .turn-card,
+.active-zone > details.turn-card {
+  border-color: var(--lane-active, var(--sage-400));
+  box-shadow: 0 0 0 1px var(--lane-active, var(--sage-400)) inset,
+              var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.04));
+}
+.history-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 4px 18px;
+  color: var(--mid);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  user-select: none;
+}
+.history-divider::before,
+.history-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-weak, var(--border));
+}
+.history-divider-label { white-space: nowrap; }
+.history-zone {
+  display: block;
+}
+.history-zone > .turn-card,
+.history-zone > details.turn-card {
+  /* History cards are visually de-emphasized so the eye lands on the
+     active turn. They're still fully interactive (click to expand). */
+  opacity: 0.88;
+  transition: opacity 120ms ease;
+}
+.history-zone > .turn-card:hover,
+.history-zone > details.turn-card:hover { opacity: 1; }
+
+/* ────────────────────────────────────────────────────────────────────────
+   v2.3 diff coloring + collapsible code blocks.
+   No external highlighter — just per-line spans the renderer produces.
+   ──────────────────────────────────────────────────────────────────────── */
+.block.code pre code .diff-add  { color: var(--success); background: color-mix(in oklab, var(--success) 8%, transparent); display: inline-block; width: 100%; }
+.block.code pre code .diff-del  { color: var(--danger);  background: color-mix(in oklab, var(--danger) 8%, transparent);  display: inline-block; width: 100%; }
+.block.code pre code .diff-hunk { color: var(--apricot-600); font-weight: 500; }
+.block.code pre code .diff-meta { color: var(--mid); }
+
+details.code-collapsible {
+  margin: 6px 0;
+  border: 1px solid var(--border-weak, var(--border));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface);
+}
+details.code-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--mid);
+  user-select: none;
+}
+details.code-collapsible > summary::-webkit-details-marker { display: none; }
+details.code-collapsible > summary::before {
+  content: '▸ ';
+  display: inline-block;
+  width: 14px;
+  transition: transform 120ms ease;
+}
+details.code-collapsible[open] > summary::before { content: '▾ '; }
+details.code-collapsible[open] > summary { border-bottom: 1px solid var(--border-weak, var(--border)); }
+details.code-collapsible > pre { margin: 0; }
+
+/* ────────────────────────────────────────────────────────────────────────
+   v2.3 syntax highlight tokens — palette uses the existing theme tokens so
+   light and dark inherit automatically. Sage/apricot/info for the warmer
+   "Claude Code" feel rather than a generic Solarized-ish.
+   ──────────────────────────────────────────────────────────────────────── */
+.block.code pre code .tok-cmt { color: var(--mid); font-style: italic; }
+.block.code pre code .tok-str { color: var(--apricot-600); }
+.block.code pre code .tok-kw  { color: var(--info); font-weight: 500; }
+.block.code pre code .tok-num { color: var(--apricot-500, var(--apricot-600)); }
+.block.code pre code .tok-fn  { color: var(--sage-500, var(--sage-400)); }
+.block.code pre code .tok-ty  { color: var(--info); }
+.block.code pre code .tok-bo  { color: var(--apricot-600); font-weight: 500; }
+.block.code pre code .tok-pr  { color: var(--sage-500, var(--sage-400)); }
+.block.code pre code .tok-tg  { color: var(--info); }
+.block.code pre code .tok-at  { color: var(--apricot-500, var(--apricot-600)); }
+.block.code pre code .tok-op  { color: var(--mid); }
+
+/* Markdown code blocks (from simpleMd) get the same tokens. */
+.block.markdown pre code .tok-cmt { color: var(--mid); font-style: italic; }
+.block.markdown pre code .tok-str { color: var(--apricot-600); }
+.block.markdown pre code .tok-kw  { color: var(--info); font-weight: 500; }
+.block.markdown pre code .tok-num { color: var(--apricot-500, var(--apricot-600)); }
+.block.markdown pre code .tok-fn  { color: var(--sage-500, var(--sage-400)); }
+.block.markdown pre code .tok-ty  { color: var(--info); }
+.block.markdown pre code .tok-bo  { color: var(--apricot-600); font-weight: 500; }
+.block.markdown pre code .tok-pr  { color: var(--sage-500, var(--sage-400)); }
+.block.markdown pre code .tok-tg  { color: var(--info); }
+.block.markdown pre code .tok-at  { color: var(--apricot-500, var(--apricot-600)); }

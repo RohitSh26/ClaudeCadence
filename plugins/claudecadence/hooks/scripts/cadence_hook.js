@@ -186,11 +186,31 @@ function registerInHub(sessionId) {
 
 function loadNodes() {
   if (!fs.existsSync(NODES_JS)) return [];
-  const text = fs.readFileSync(NODES_JS, 'utf8');
+  let text; try { text = fs.readFileSync(NODES_JS, 'utf8'); } catch (_) { return []; }
   // Match: window.TIMELINE_NODES = [ ... ];
   const m = text.match(/window\.TIMELINE_NODES\s*=\s*(\[[\s\S]*\])\s*;/);
-  if (!m) return [];
-  try { return JSON.parse(m[1]); } catch (_) { return []; }
+  if (!m) { rotateCorruptNodes(text, 'no TIMELINE_NODES marker'); return []; }
+  try { return JSON.parse(m[1]); }
+  catch (exc) { rotateCorruptNodes(text, 'JSON parse failed: ' + (exc && exc.message || exc)); return []; }
+}
+
+// On malformed nodes.js, move it aside to nodes.js.bak (keeping at most 3
+// rotated backups) and let saveNodes() rebuild from empty. Without rotation,
+// loadNodes() silently returns [] and the next saveNodes() OVERWRITES the
+// damaged-but-not-empty file — losing whatever was recoverable. v2.3.
+function rotateCorruptNodes(rawText, reason) {
+  try {
+    safeMkdir(DATA_DIR);
+    // Shift existing backups: .bak.2 → .bak.3, .bak.1 → .bak.2, .bak → .bak.1.
+    for (let i = 2; i >= 0; i--) {
+      const src = NODES_JS + (i === 0 ? '.bak' : `.bak.${i}`);
+      const dst = NODES_JS + `.bak.${i + 1}`;
+      if (i + 1 > 3) { try { fs.unlinkSync(src); } catch (_) {} continue; }
+      if (fs.existsSync(src)) { try { fs.renameSync(src, dst); } catch (_) {} }
+    }
+    fs.writeFileSync(NODES_JS + '.bak', rawText);
+    logErr(`nodes.js corrupt (${reason}) — rotated to nodes.js.bak; starting fresh`);
+  } catch (_) { /* fail-soft */ }
 }
 
 function saveNodes(nodes) {
@@ -365,6 +385,53 @@ function shortStr(s, n) {
 
 function sessionIdOf(payload) {
   return String(payload.session_id || 'main').slice(0, 12);
+}
+
+// v2.3 — language detection from file extension. Used by Write blocks so the
+// viewer can syntax-highlight the preview correctly. Conservative mapping;
+// unknown extensions fall back to 'text'.
+const LANG_BY_EXT = {
+  '.js': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript', '.jsx': 'jsx',
+  '.ts': 'typescript', '.tsx': 'tsx', '.py': 'python', '.rb': 'ruby',
+  '.go': 'go', '.rs': 'rust', '.java': 'java', '.kt': 'kotlin',
+  '.swift': 'swift', '.c': 'c', '.h': 'c', '.cpp': 'cpp', '.cc': 'cpp',
+  '.hpp': 'cpp', '.cs': 'csharp', '.php': 'php', '.sh': 'bash',
+  '.bash': 'bash', '.zsh': 'bash', '.fish': 'bash', '.sql': 'sql',
+  '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.toml': 'toml',
+  '.html': 'html', '.htm': 'html', '.css': 'css', '.scss': 'scss',
+  '.md': 'markdown', '.markdown': 'markdown',
+  '.xml': 'xml', '.svg': 'xml', '.lua': 'lua', '.r': 'r',
+  '.dart': 'dart', '.scala': 'scala', '.ex': 'elixir', '.exs': 'elixir',
+  '.erl': 'erlang', '.clj': 'clojure', '.hs': 'haskell',
+};
+function detectLangFromPath(p) {
+  if (!p) return null;
+  const i = p.lastIndexOf('.');
+  if (i < 0) return null;
+  return LANG_BY_EXT[p.slice(i).toLowerCase()] || null;
+}
+
+// Build a minimal unified-style diff hunk for Edit/MultiEdit. old_string and
+// new_string are exactly the changed region (Claude Code's contract), so we
+// emit '-' for the old block and '+' for the new block — no LCS needed. The
+// viewer highlights the result as `lang: diff`. v2.3.
+function buildHunkDiff(filePath, oldText, newText, maxLines) {
+  maxLines = maxLines || 200;
+  const oldLines = (oldText || '').split('\n');
+  const newLines = (newText || '').split('\n');
+  const head = [`--- a/${filePath}`, `+++ b/${filePath}`,
+    `@@ -1,${oldLines.length} +1,${newLines.length} @@`];
+  const body = [];
+  const half = Math.max(1, Math.floor(maxLines / 2));
+  const trim = (lines, prefix) => {
+    if (lines.length <= half) return lines.map(l => prefix + l);
+    const out = lines.slice(0, half - 1).map(l => prefix + l);
+    out.push(`${prefix}… ${lines.length - (half - 1)} more lines`);
+    return out;
+  };
+  body.push(...trim(oldLines, '-'));
+  body.push(...trim(newLines, '+'));
+  return head.concat(body).join('\n');
 }
 
 // ─────────────────────────── Event handlers ──────────────────────────────
@@ -552,6 +619,37 @@ function handlePostToolUse(payload) {
     if (removed)    summaryParts.push('−' + removed);          // U+2212 minus
     if (totalLines) summaryParts.push(totalLines + ' lines');
     const summary = summaryParts.join(' · ');
+    // v2.3: surface the actual diff inside the card so users see WHAT changed,
+    // not just "Edited foo.js". For Edit, old_string→new_string is exactly
+    // the hunk, so we can emit a minimal unified-style diff without LCS.
+    const blocks = [];
+    const detectedLang = detectLangFromPath(filePath);
+    const MAX_DIFF_LINES = 200;   // cap so massive edits don't explode the UI
+    const MAX_WRITE_PREVIEW = 80; // first N lines for Write
+    if (tool === 'Edit') {
+      blocks.push({
+        type: 'code', lang: 'diff',
+        value: buildHunkDiff(filePath, ti.old_string || '', ti.new_string || '', MAX_DIFF_LINES),
+      });
+    } else if (tool === 'MultiEdit') {
+      const parts = [];
+      const edits = ti.edits || [];
+      for (let i = 0; i < edits.length; i++) {
+        parts.push(`@@ edit ${i + 1} of ${edits.length} @@`);
+        parts.push(buildHunkDiff(filePath, edits[i].old_string || '', edits[i].new_string || '', MAX_DIFF_LINES));
+      }
+      blocks.push({ type: 'code', lang: 'diff', value: parts.join('\n') });
+    } else if (tool === 'Write') {
+      const content = ti.content || '';
+      const lines = content.split('\n');
+      const preview = lines.slice(0, MAX_WRITE_PREVIEW).join('\n');
+      const suffix = lines.length > MAX_WRITE_PREVIEW
+        ? `\n… ${lines.length - MAX_WRITE_PREVIEW} more lines`
+        : '';
+      blocks.push({ type: 'code', lang: detectedLang || 'text', value: preview + suffix });
+    } else if (tool === 'NotebookEdit') {
+      blocks.push({ type: 'code', lang: 'python', value: (ti.new_source || '').slice(0, 8000) });
+    }
     return {
       agent: 'orchestrator',
       kind: 'tool_call',
@@ -564,6 +662,7 @@ function handlePostToolUse(payload) {
       lines_added: added,
       lines_removed: removed,
       lines_total: totalLines,
+      blocks,
     };
   }
 
@@ -751,6 +850,23 @@ function popPendingTurn(session) {
     else fs.unlinkSync(f);
   } catch (_) {}
   const [turnId, lowerBoundTs] = head.split('|');
+  return { turnId: turnId || null, lowerBoundTs: lowerBoundTs || null };
+}
+
+// Peek the queue without popping. offset=0 is the head, offset=1 is the next.
+// Used after popPendingTurn to find the NEXT pending turn's lower bound, which
+// becomes the upper bound on the just-popped turn's response collection.
+// This is the v2.3 mid-stream-interrupt fix: when the user submits prompt #2
+// before Stop fires for prompt #1, prompt #2's UPS lower bound is exactly the
+// ts at which prompt #1's response must end.
+function peekPendingTurn(session, offset) {
+  offset = offset || 0;
+  const f = queueFile(session);
+  if (!fs.existsSync(f)) return null;
+  let raw; try { raw = fs.readFileSync(f, 'utf8'); } catch (_) { return null; }
+  const lines = raw.split('\n').filter(Boolean);
+  if (offset >= lines.length) return null;
+  const [turnId, lowerBoundTs] = lines[offset].split('|');
   return { turnId: turnId || null, lowerBoundTs: lowerBoundTs || null };
 }
 
@@ -1006,6 +1122,14 @@ function deriveCatchUpNodes(transcriptPath, session) {
   const realPrompts = graph.entries.filter(isRealUserPromptEntry);
   if (!realPrompts.length) return [];
   const promptUuids = new Set(realPrompts.map(p => p.uuid));
+  // The LAST real prompt is the active turn — handleStop owns its response
+  // capture via the cursor-based path. Synthesising a response for an
+  // in-progress orchestrator turn produces premature/partial text that
+  // never updates (respByTid guard short-circuits later passes). v2.3:
+  // skip the last prompt unless it's clearly settled.
+  const lastPromptUuid = realPrompts[realPrompts.length - 1].uuid;
+  const SETTLED_MS = 30 * 1000;
+  const now = Date.now();
 
   const idx = indexExistingNodes(loadNodes());
   const out = [];
@@ -1053,6 +1177,17 @@ function deriveCatchUpNodes(transcriptPath, session) {
       .filter(o => (o.type || o.role) === 'assistant')
       .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
     if (!asstSorted.length) continue;
+
+    // Active orchestrator turn guard (v2.3): if this is the most recent prompt
+    // AND its latest assistant entry was within SETTLED_MS, the turn is still
+    // in progress — leave the response for handleStop. Older prompts (a
+    // sibling already exists) are definitely closed; settled turns are also
+    // safe to emit.
+    if (prompt.uuid === lastPromptUuid) {
+      const lastTs = asstSorted[asstSorted.length - 1].timestamp || asstSorted[asstSorted.length - 1].ts;
+      const lastMs = lastTs ? Date.parse(lastTs) : NaN;
+      if (Number.isFinite(lastMs) && now - lastMs < SETTLED_MS) continue;
+    }
 
     const rtext = asstSorted.map(extractAssistantText).filter(Boolean).join('\n');
     if (!rtext) continue;
@@ -1120,9 +1255,17 @@ function isToolResultEntry(obj) {
 // Stops at the first non-tool-result user entry (the next-turn boundary).
 // Tool-result entries are skipped — they appear mid-turn between Claude's
 // tool_use and the next assistant chunk.
+//
+// upperBound (optional): if provided, entries with ts >= upperBound are
+// treated as belonging to the NEXT turn and ignored. This is the mid-stream
+// interrupt defense (v2.3) — when prompt #2 is submitted while Claude is
+// still responding to prompt #1, prompt #2's UPS lowerBoundTs is the exact
+// ts at which prompt #1's response must end. We use it as a strict ceiling
+// even before the user-2 entry physically appears in the transcript.
+//
 // Returns { ts, text } where ts is the last consumed assistant entry's ts
 // (used to advance the cursor), or null if nothing found.
-function firstAssistantTextAfter(transcriptPath, cursor) {
+function firstAssistantTextAfter(transcriptPath, cursor, upperBound) {
   if (!transcriptPath || !fs.existsSync(transcriptPath)) return null;
   let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return null; }
 
@@ -1138,6 +1281,10 @@ function firstAssistantTextAfter(transcriptPath, cursor) {
     const ts = o.timestamp || o.ts || (o.message && (o.message.created_at || o.message.timestamp)) || null;
     if (!ts) continue;
     if (cursor && ts <= cursor) continue;
+    if (upperBound && ts >= upperBound) {
+      if (collecting) break;
+      continue;
+    }
 
     if (role === 'user') {
       if (isToolResultEntry(o)) continue; // mid-flow tool result — keep collecting
@@ -1164,7 +1311,7 @@ function firstAssistantTextAfter(transcriptPath, cursor) {
 // unchanged for STABLE_FOR_MS before returning. This catches long working
 // responses where the final 1+ KB summary block is written ~hundreds of ms
 // after Stop fires.
-function waitForFirstAssistantTextAfter(transcriptPath, cursor, maxWaitMs) {
+function waitForFirstAssistantTextAfter(transcriptPath, cursor, maxWaitMs, upperBound) {
   maxWaitMs = maxWaitMs || 8000;
   const STABLE_FOR_MS = 600;
   const POLL_MS = 100;
@@ -1176,7 +1323,7 @@ function waitForFirstAssistantTextAfter(transcriptPath, cursor, maxWaitMs) {
   // Tight initial poll: spin briefly waiting for first content.
   // Once we have content, switch to "stable for X ms" mode.
   while (Date.now() < deadline) {
-    const item = firstAssistantTextAfter(transcriptPath, cursor);
+    const item = firstAssistantTextAfter(transcriptPath, cursor, upperBound);
     if (!item) {
       lastItem = null;
       stableSince = null;
@@ -1233,11 +1380,18 @@ function handleStop(payload) {
   const lowerBound = popped && popped.lowerBoundTs ? popped.lowerBoundTs : null;
   let effective = globalCursor || null;
   if (lowerBound && (!effective || lowerBound > effective)) effective = lowerBound;
+  // 2b) Upper bound (v2.3 mid-stream-interrupt fix): if a NEXT turn is already
+  //     queued, its UPS lower-bound ts is the strict ceiling for this turn's
+  //     response. Anything at or after that ts belongs to turn N+1. Prevents
+  //     prompt #1's response from absorbing prompt #2's response when the user
+  //     interrupts mid-stream.
+  const next = peekPendingTurn(session, 0);
+  const upperBound = next && next.lowerBoundTs ? next.lowerBoundTs : null;
   // 3) Poll the transcript for assistant text after the cursor. Stop fires the
   //    same instant the final transcript flush is in progress; the polling waits
   //    for the response to STABILIZE (not just appear) so multi-block long
   //    working responses are captured complete rather than truncated to chunk 1.
-  const item = waitForFirstAssistantTextAfter(payload.transcript_path, effective);
+  const item = waitForFirstAssistantTextAfter(payload.transcript_path, effective, undefined, upperBound);
   let text = null;
   if (item) {
     text = item.text;
