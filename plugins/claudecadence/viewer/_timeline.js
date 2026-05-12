@@ -1887,6 +1887,24 @@
       .catch(() => {});
   }
 
+  // v2.2: show the running plugin version in the chrome. Source of truth is
+  // /api/version served by cadence-serve; quietly hide on miss.
+  function wireVersionTag() {
+    const tag = document.getElementById('version-tag');
+    if (!tag) return;
+    fetch('api/version', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.version) {
+          tag.textContent = 'v' + j.version;
+          tag.href = 'https://github.com/RohitSh26/ClaudeCadence/releases/tag/v' + j.version;
+        } else {
+          tag.style.display = 'none';
+        }
+      })
+      .catch(() => { tag.style.display = 'none'; });
+  }
+
   // Resolve the hub URL — three cases:
   //   1. We're served under /c/<slug>/ (via hub) → link to "/"
   //   2. We're served per-project, hub is running → fetch /api/hub-url, link to it
@@ -1915,6 +1933,7 @@
     window.addEventListener('hashchange', () => { readHash(); render(); });
     wireHomeLink();
     wireProjectTitle();
+    wireVersionTag();
     render();
     // Seed polling baseline so we don't immediately rerender on first tick.
     fetch('data/nodes.js?_t=' + Date.now(), { cache: 'no-store' })

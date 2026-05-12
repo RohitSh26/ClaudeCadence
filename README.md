@@ -1,5 +1,11 @@
 # ClaudeCadence
 
+[![Latest release](https://img.shields.io/github/v/release/RohitSh26/ClaudeCadence?sort=semver&display_name=tag&color=6ee7c1&labelColor=151921)](https://github.com/RohitSh26/ClaudeCadence/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-9af0d4?labelColor=151921)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/RohitSh26/ClaudeCadence?style=flat&color=fcd34d&labelColor=151921)](https://github.com/RohitSh26/ClaudeCadence/stargazers)
+[![Zero LLM cost](https://img.shields.io/badge/LLM%20cost-%240.00-86efac?labelColor=151921)](#cost)
+[![No telemetry](https://img.shields.io/badge/telemetry-none-93c5fd?labelColor=151921)](SECURITY.md)
+
 > See the rhythm of your multi-agent Claude Code sessions.
 
 <p align="center">

@@ -3474,3 +3474,18 @@ body { line-height: 1.65; }
 .block.md table tr:nth-child(even) td { background: var(--paper); }
 .block.md table tr:hover td { background: var(--bone); }
 [data-theme="dark"] .block.md table th { background: var(--bone); color: var(--mid); }
+
+/* v2.2: running version tag in chrome */
+.live-meter .version-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--mid);
+  text-decoration: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: color .14s, background .14s;
+}
+.live-meter .version-tag:hover {
+  color: var(--apricot-600);
+  background: var(--bone);
+}
