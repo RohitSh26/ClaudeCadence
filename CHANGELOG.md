@@ -2,15 +2,29 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
-## [Unreleased]
+## [2.2.0] – 2026-05-12
 
 ### Added
-- Badges in README (latest release, license, stars, zero-cost, no-telemetry).
-- `CHANGELOG.md` (this file).
-- `CONTRIBUTING.md` with a quickstart for the local-dev loop.
-- `.github/ISSUE_TEMPLATE/` with bug-report and feature-request templates.
-- `.github/PULL_REQUEST_TEMPLATE.md`.
-- Running plugin version surfaced in the viewer chrome.
+- README badges (release / license / stars / zero-cost / no-telemetry).
+- `CHANGELOG.md` and `CONTRIBUTING.md`.
+- `.github/ISSUE_TEMPLATE/` with bug-report and feature-request templates; `.github/PULL_REQUEST_TEMPLATE.md`.
+- `.github/workflows/test.yml` — CI matrix (Node 18/20/22 × ubuntu/macos) running `npm test` + `cadence-audit` smoke + `node --check` on every JS file.
+- Running plugin version surfaced in the viewer chrome via new `/api/version` endpoint on `cadence-serve`.
+- **First-run experience** — empty-state replaced with onboarding hero + 4-card grid + example fork-merge image + slash-command reference.
+- **File-edit `+N −M` diff badges** — hook now captures `lines_added` / `lines_removed` from Write/Edit/MultiEdit/NotebookEdit tool_inputs; viewer renders an inline badge in the relevant child rows.
+- **Decisions filter pin** in the session-strip — toggle to filter the timeline to decision-kinded nodes and prompts containing decision verbs (decide / chose / use / go with / pick / ship / skip / kill / drop / merge / deploy / approve / reject / defer). Live count badge.
+- **Hub dark mode** — full `[data-theme="dark"]` block matching the per-project viewer; theme toggle wired.
+- **Activity heatmap on the hub** — 7×24 grid of prompts in the last 14 days across all cadences.
+- **Cross-project content search at the hub** — the existing project-name search is now also a node-content search across every cached cadence; grouped results with deep-links.
+- **Mobile responsive** layout for both hub and viewer (filter wrap, stack stats, smaller rail, hide version tag below 480px).
+- **`bin/cadence-export`** — markdown export CLI (`--since 7d`, `--decisions`, `--session`, `--out`).
+- **Test suite in repo** — 48 cases across `test/extract.test.js`, `test/markdown.test.js`, `test/pairing.test.js`, `test/security.test.js`, `test/syntax.test.js`. Custom runner in `test/run.js` (zero deps).
+- Plugin manifest keywords: `hooks`, `fork-merge`, `subagent`.
+
+### Changed
+- `child-row` rendering consolidated into a single `childRow()` factory shared by both the initial and "show all" code paths.
+
+## [Unreleased]
 
 ## [2.1.1] – 2026-05-11
 
