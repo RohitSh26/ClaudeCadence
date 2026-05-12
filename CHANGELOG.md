@@ -2,6 +2,11 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
+## [2.3.1] – 2026-05-12
+
+### Fixed
+- **Expandable Write/Edit child rows** — v2.3.0 attached a unified diff to every Write/Edit node, but the dispatch-group renderer only displayed the compact summary row, so the diff was unreachable. Rows for nodes that carry `blocks` now render as a `<details>` element; clicking the row reveals the syntax-highlighted diff (or language-detected Write preview) inline. Bash/Read/Grep rows without blocks stay flat as before.
+
 ## [2.3.0] – 2026-05-12
 
 ### Added

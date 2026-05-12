@@ -54,6 +54,23 @@ Or test with the standalone serve binary:
 python3 plugins/claudecadence/bin/cadence-serve [--hub]
 ```
 
+### Hot-patching the running plugin without bumping a version
+
+`/reload-plugins` reads from the marketplace working copy at
+`~/.claude/plugins/marketplaces/claudecadence/plugins/claudecadence/` AND copies it into a versioned cache at
+`~/.claude/plugins/cache/claudecadence/claudecadence/<VERSION>/`. The hook resolves `PLUGIN_ROOT` from
+`CLAUDE_PLUGIN_ROOT` which Claude Code points at the **cache** dir — so the marketplace copy alone is not enough.
+
+To hot-patch a fix into a running session, **always touch all three sources**:
+
+1. `~/.claude/plugins/marketplaces/claudecadence/plugins/claudecadence/{viewer,hub,hooks}/...`
+2. `~/.claude/plugins/cache/claudecadence/claudecadence/<VERSION>/{viewer,hub,hooks}/...`
+3. The active per-project `<PROJECT>/.claude/cadence/{_timeline.js,_design.css,index.html}`
+
+If you skip #2, `bootstrapProject` (which sha-compares cache→project) will silently revert your project-dir patch on the next hook fire. If you skip #3, the change appears only after the next hook fire.
+
+**The hub** lives at `~/.claude/cadence/` and uses its OWN `_design.css` / `_home.js` / `home.html` (different from the per-project viewer). Don't copy the viewer's design.css over the hub's — it will break the heatmap, search, project rows, etc.
+
 ## Releasing
 
 Bump `version` in `plugins/claudecadence/.claude-plugin/plugin.json`, tag with `git tag -a vX.Y.Z`, push, then create a GitHub Release.
