@@ -624,8 +624,11 @@ function handlePostToolUse(payload) {
     // the hunk, so we can emit a minimal unified-style diff without LCS.
     const blocks = [];
     const detectedLang = detectLangFromPath(filePath);
-    const MAX_DIFF_LINES = 200;   // cap so massive edits don't explode the UI
-    const MAX_WRITE_PREVIEW = 80; // first N lines for Write
+    // v2.3.2: raise caps significantly — users want to actually SEE the
+    // change, not a "… N more lines" hint. The viewer's collapsible code
+    // block keeps the card compact when closed.
+    const MAX_DIFF_LINES = 2000;
+    const MAX_WRITE_PREVIEW = 600;
     if (tool === 'Edit') {
       blocks.push({
         type: 'code', lang: 'diff',

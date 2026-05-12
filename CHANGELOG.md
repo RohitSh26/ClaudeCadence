@@ -2,6 +2,11 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
+## [2.3.2] – 2026-05-12
+
+### Fixed
+- **Diff truncation** — `MAX_DIFF_LINES` raised from 200 → 2000 and `MAX_WRITE_PREVIEW` from 80 → 600 so users actually see the full change. The viewer's collapsible `<details>` keeps the card compact when closed, so the higher cap doesn't bloat the timeline.
+
 ## [2.3.1] – 2026-05-12
 
 ### Fixed
