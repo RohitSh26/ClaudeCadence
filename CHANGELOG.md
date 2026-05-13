@@ -18,6 +18,12 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.6.2] – 2026-05-13
+
+### Changed
+- **Editorial prose centers within the feed.** Hero h1, lede, full prompt body, and response prose (h3/p/ul/ol) now have `margin-left: auto; margin-right: auto` so the unused width on a wide viewport sits as symmetric whitespace on either side of the column rather than all on the right. Reading column max-width preserved (80-95ch) so line length stays in the editorial sweet spot. Structural elements (phase anchors, ledger lists, rollup tables, dispatch fans) keep full-feed-width for their data layout.
+- **Prompt body / response prose bumped to 95ch** (was 80ch). Still inside the 60-95ch readability range; fills the centered column more confidently.
+
 ## [2.6.1] – 2026-05-13
 
 ### Fixed

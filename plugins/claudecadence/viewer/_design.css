@@ -4998,3 +4998,40 @@ li.turn > .prompt-hero details.prompt-body-collapsible[open] > summary {
 li.turn > .prompt-hero details.prompt-body-collapsible > .prompt-body {
   margin-top: 14px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v2.6.2 — center editorial prose within the feed so empty space is
+   symmetric on either side instead of dumped on the right of every line.
+   Prose max-widths (80ch / 95ch) are preserved — this only centers; it
+   does not widen the reading column. Structural elements (phase anchors,
+   ledger lists, rollup tables, dispatch fans) stay full-feed-width to
+   keep their generous data layout.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Prompt hero: h1 + lede + full markdown body all center within the feed. */
+li.turn > .prompt-hero h1,
+li.turn > .prompt-hero .lede,
+li.turn > .prompt-hero .prompt-body {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Prompt body width bumped slightly so it visually fills the centered
+   column more confidently (still in the 60-95ch reading sweet spot). */
+li.turn > .prompt-hero .prompt-body { max-width: 95ch; }
+
+/* Response band: prose centers within the tinted band. Eyebrow stays
+   left-aligned as a label, so the content reads "label · content · "
+   instead of "label centered · content centered · ". */
+li.turn > .response h3,
+li.turn > .response p,
+li.turn > .response ul,
+li.turn > .response ol {
+  margin-left: auto;
+  margin-right: auto;
+}
+li.turn > .response p,
+li.turn > .response ul,
+li.turn > .response ol {
+  max-width: 95ch;
+}
