@@ -1346,9 +1346,9 @@
     // render the ACTIVE session's turns directly into root — no sidebar,
     // no shell, no pane container. The chrome lives in the topbar now.
     paintSessionMenu(sessions);
-    const selected = sessions.find(s => s.id === activeSessionForView);
-    if (selected) {
-      const selNodes = nodes.filter(n => (n.session || 'main') === selected.id);
+    const activeSel = sessions.find(s => s.id === activeSessionForView);
+    if (activeSel) {
+      const selNodes = nodes.filter(n => (n.session || 'main') === activeSel.id);
       const turns = groupIntoTurns(selNodes).reverse();
       turns.forEach(t => root.appendChild(renderTurn(t)));
       return;
@@ -2341,9 +2341,11 @@
   // Two paths: /c/<slug>/ (served via hub) → use slug; otherwise fetch from
   // /api/project-name on the per-project server.
   function setProjectTitle(name) {
+    if (!name) return;
     const h1 = document.getElementById('project-title');
-    if (!h1 || !name) return;
-    h1.innerHTML = escapeHtml(name) + '<span class="qualifier"> — live timeline</span>';
+    if (h1) h1.innerHTML = escapeHtml(name) + '<span class="qualifier"> — live timeline</span>';
+    const proj = document.getElementById('brand-proj');
+    if (proj) proj.textContent = name;
     document.title = name + ' · ClaudeCadence';
   }
   function wireProjectTitle() {
