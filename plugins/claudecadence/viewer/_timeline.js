@@ -1926,6 +1926,23 @@
     return childTargetText(c) || '(unknown file)';
   }
 
+  // v2.7 — detect shell-command-shaped prompts so they render in mono.
+  // Heuristic: short (< 240 chars), single-line, starts with a shell
+  // verb or token (cd / git / npm / curl / $ / etc.) or contains common
+  // shell operators (&& / || / | / >). Tight enough that prose never
+  // falsely triggers.
+  function isCommandPrompt(text) {
+    if (!text) return false;
+    const t = String(text).trim();
+    if (t.length > 240) return false;
+    if (t.includes('\n')) return false;
+    if (/^[#`>\-*]/.test(t)) return false;            // markdown heading / quote / list / code fence
+    if (/^[$>][ \t]/.test(t)) return true;            // explicit shell prompt
+    if (/^(cd|git|npm|pnpm|yarn|bun|brew|curl|wget|ls|cat|grep|sed|awk|find|rm|cp|mv|mkdir|touch|chmod|chown|ssh|scp|docker|kubectl|terraform|bundle|rake|rails|python|pip|uv|node|bash|zsh|sh|sudo|export|source|make)\s/i.test(t)) return true;
+    if (/\s(&&|\|\|)\s/.test(t)) return true;          // chained shell
+    return false;
+  }
+
   // v2.6.1: take the full prompt and split into:
   //   h1   — first markdown heading (`# …`), first sentence, or first line
   //   body — everything else, as raw markdown text (caller renders it)
@@ -2053,6 +2070,10 @@
       // (your 104-line spec) render in full — no more 400-char lede cap.
       // Real image blocks (v2.6) attach as figures after the body.
       const { h1, body, attachments: placeholderCount } = splitPromptForHero(turn.prompt);
+      // v2.7: detect command-style prompts — short, single-line, looks like
+      // a shell invocation. Render as mono instead of serif headline.
+      const rawPrompt = ((turn.prompt.blocks && turn.prompt.blocks[0] && turn.prompt.blocks[0].value) || turn.prompt.title || '').trim();
+      if (isCommandPrompt(rawPrompt)) hero.classList.add('is-command');
       const imageBlocks = (turn.prompt.blocks || []).filter(b => b && b.type === 'image');
       const totalAttachments = Math.max(imageBlocks.length, placeholderCount);
       let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span>`;
@@ -2100,8 +2121,12 @@
       });
       li.appendChild(hero);
     } else {
+      // v2.7: collapse system-activity turns. Mark the parent li so CSS
+      // can shrink padding; the hero becomes a thin mono "session event"
+      // label instead of an italic-serif full-width banner.
+      li.classList.add('is-system-activity');
       const orphan = el('section','prompt-hero');
-      orphan.innerHTML = `<div class="eyebrow">session events</div><h1 style="font-style:italic;color:var(--mid);">(no prompt — system activity)</h1>`;
+      orphan.innerHTML = `<h1>session event · ${escapeHtml(shortTime(turn.ts))}</h1>`;
       li.appendChild(orphan);
     }
 

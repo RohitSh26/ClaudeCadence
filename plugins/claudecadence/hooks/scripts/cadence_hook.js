@@ -400,27 +400,59 @@ const IMG_MAX_BYTES = 5 * 1024 * 1024;
 const IMG_MAX_COUNT = 5;
 const IMG_LOOKBACK = 80;
 
-function extractAttachedImages(transcriptPath) {
+// v2.7: poll-and-verify. UPS fires BEFORE the new user-message JSON is
+// flushed to the transcript, so a naive backwards walk finds the PREVIOUS
+// turn's image attachments instead of the current ones (the same race that
+// Bug B fought for response capture). We retry for up to 1.5s, accepting
+// only a user-msg whose text content matches the prompt we just received.
+// If the verification never matches, we return [] rather than a stale set.
+function extractAttachedImages(transcriptPath, expectedPromptText) {
   if (!transcriptPath || !fs.existsSync(transcriptPath)) return [];
-  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return []; }
-  const lines = raw.split('\n').filter(Boolean);
-  const start = Math.max(0, lines.length - IMG_LOOKBACK);
-  for (let i = lines.length - 1; i >= start; i--) {
-    let o; try { o = JSON.parse(lines[i]); } catch (_) { continue; }
-    if ((o.type || o.role) !== 'user') continue;
-    const c = o.message && o.message.content;
-    if (!Array.isArray(c)) continue;
-    const imgs = c.filter(b => b && b.type === 'image' && b.source && b.source.type === 'base64' && typeof b.source.data === 'string');
-    if (!imgs.length) continue;
-    const out = [];
-    for (const b of imgs) {
-      if (out.length >= IMG_MAX_COUNT) break;
-      if (b.source.data.length > IMG_MAX_BYTES) continue;       // skip oversized
-      out.push({ media_type: b.source.media_type || 'image/png', data: b.source.data });
+  const expected = String(expectedPromptText || '').trim();
+  // Use a normalized prefix for the match — strip leading "[Image #N]"
+  // markers since the harness puts them in front of the real prompt body.
+  const expectedKey = expected.replace(/\[Image\s*(?:#\d+|attached)?\]/gi, '').trim().slice(0, 80);
+
+  const DEADLINE = Date.now() + 1500;
+  let lastSeen = [];
+
+  while (Date.now() <= DEADLINE) {
+    let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { break; }
+    const lines = raw.split('\n').filter(Boolean);
+    const start = Math.max(0, lines.length - IMG_LOOKBACK);
+
+    for (let i = lines.length - 1; i >= start; i--) {
+      let o; try { o = JSON.parse(lines[i]); } catch (_) { continue; }
+      if ((o.type || o.role) !== 'user') continue;
+      const c = o.message && o.message.content;
+      if (!Array.isArray(c)) continue;
+      const imgs = c.filter(b => b && b.type === 'image' && b.source && b.source.type === 'base64' && typeof b.source.data === 'string');
+      if (!imgs.length) continue;
+
+      // Verify the user-msg's TEXT content matches the prompt we received.
+      // Without this, the race against transcript flush returns whichever
+      // prior turn's image-bearing user-msg was last written.
+      const texts = c.filter(b => b && b.type === 'text').map(b => b.text || '').join(' ');
+      if (expectedKey && texts && !texts.includes(expectedKey.slice(0, 40))) continue;
+
+      const out = [];
+      for (const b of imgs) {
+        if (out.length >= IMG_MAX_COUNT) break;
+        if (b.source.data.length > IMG_MAX_BYTES) continue;
+        out.push({ media_type: b.source.media_type || 'image/png', data: b.source.data });
+      }
+      lastSeen = out;
+      if (!expectedKey || (texts && texts.includes(expectedKey.slice(0, 40)))) return out;
+      break; // walked back through one image-bearing msg but didn't verify
     }
-    return out;
+    // No verified match — sleep briefly and retry (busy wait; hook is sync).
+    const wake = Date.now() + 100;
+    while (Date.now() < wake) { /* spin */ }
   }
-  return [];
+  // Deadline reached — return whatever the LAST attempt found rather than
+  // empty, so we don't lose images entirely if verification fails on edge
+  // cases (e.g. text content normalization differences).
+  return lastSeen;
 }
 
 // Write extracted images to .claude/cadence/images/<sid>-<tid>-<idx>.<ext>
@@ -665,9 +697,11 @@ function handleUserPrompt(payload) {
   let summary = prompt.slice(0, 160).replace(/\n/g, ' ').trim();
   if (prompt.length > 160) summary += '…';
   const blocks = [{ type: 'markdown', value: prompt.slice(0, 200000) }];
-  // v2.6: persist attached images (if any) and append as image blocks.
+  // v2.7: persist attached images. Pass the prompt text so the extractor
+  // can verify it's reading the RIGHT user-message and not the previous
+  // turn's (UPS-vs-transcript-flush race).
   try {
-    const imgs = extractAttachedImages(payload.transcript_path);
+    const imgs = extractAttachedImages(payload.transcript_path, prompt);
     const persisted = persistAttachedImages(imgs, session, tid);
     persisted.forEach(b => blocks.push(b));
   } catch (exc) { logErr(`image extract failed: ${exc && exc.message || exc}`); }

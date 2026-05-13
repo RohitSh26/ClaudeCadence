@@ -18,6 +18,17 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.7.0] – 2026-05-13
+
+### Changed — UX overhaul (engineer-first, not magazine-first)
+- **Feed width** narrows from 980 → 760 px and prose is **left-aligned again** (reversing v2.6.2's centering). Short responses no longer sit as orphaned centered islands inside a vast sage band; long responses fill the column naturally; tables get to use the full feed width.
+- **Tables / pre / image blocks inside `.response`** no longer inherit the prose max-width cap. 4-5 column data tables stop getting squeezed.
+- **Command-style prompts render in mono.** `cd ~/.claude/...`, `git pull origin main`, `npm install`, etc. now render as a mono code-block-style headline (apricot left rule + bone bg) instead of a 30 pt serif h1. Heuristic: short, single-line, starts with a shell verb or contains `&&` / `||` / `$ ` / `> `.
+- **System-activity turns** ("no prompt — system activity") collapse to a thin mono `session event · HH:MM:SS` line instead of getting a full italic-serif hero. Padding shrinks so they read as compact rows, not full editorial turns.
+
+### Fixed
+- **Image-extraction race.** UPS fires before the user-message JSON is flushed to the transcript. The naive backwards walk was finding the **previous** turn's image-bearing message — that's why the "4 images attached" prompt was only rendering 1 image (the prior turn's JPEG). Now `extractAttachedImages` polls for up to 1.5 s and verifies the user-msg's text content matches the prompt we received before accepting its images.
+
 ## [2.6.2] – 2026-05-13
 
 ### Changed

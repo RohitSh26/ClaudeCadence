@@ -5035,3 +5035,75 @@ li.turn > .response ul,
 li.turn > .response ol {
   max-width: 95ch;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v2.7 — UX overhaul. Reversal of the v2.6.2 centering.
+   - Narrow the feed itself (980px → 760px) so content fills the
+     reading column naturally instead of leaving 25-35% empty space.
+   - Left-align prose again. Engineers SCAN a timeline, they don't read
+     it like Substack. Left-aligned is faster to parse.
+   - Tables / pre / image blocks in responses get to use the full feed
+     width again.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.workspace .timeline { max-width: 760px; }
+li.turn { padding: 64px 28px 84px; }
+
+/* Undo v2.6.2 centering — left-align prose, full max-width within feed. */
+li.turn > .prompt-hero h1,
+li.turn > .prompt-hero .lede,
+li.turn > .prompt-hero .prompt-body,
+li.turn > .response h3,
+li.turn > .response p,
+li.turn > .response ul,
+li.turn > .response ol {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+
+/* Tables inside response get full band width — was being capped at 95ch
+   and squeezing 4-5 column data tables. */
+li.turn > .response table,
+li.turn > .response pre,
+li.turn > .response .block {
+  max-width: 100%;
+}
+
+/* Command-style prompt: when handleUserPrompt detects a shell invocation,
+   the hero gets .is-command and the h1 becomes mono. Saves the user from
+   "30pt serif rendering of cd ~/.claude/..." */
+li.turn > .prompt-hero.is-command h1 {
+  font-family: var(--font-mono);
+  font-size: clamp(15px, 1.6vw, 18px);
+  line-height: 1.45;
+  letter-spacing: 0;
+  color: var(--apricot-700);
+  word-break: break-word;
+  background: var(--bone);
+  padding: 10px 14px;
+  border-left: 3px solid var(--apricot-500);
+  border-radius: 4px;
+  font-weight: 500;
+}
+[data-theme="dark"] li.turn > .prompt-hero.is-command h1 {
+  background: color-mix(in oklab, var(--apricot-500) 8%, var(--bone));
+  color: var(--apricot-600);
+}
+
+/* System-activity turns (no real prompt) — collapse the hero to a thin
+   meta line so noise doesn't get full editorial real estate. */
+li.turn.is-system-activity > .prompt-hero {
+  margin: 0 0 18px;
+}
+li.turn.is-system-activity > .prompt-hero h1 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--neutral-400);
+  font-weight: 500;
+  font-style: normal;
+}
+li.turn.is-system-activity > .prompt-hero .eyebrow { display: none; }
+li.turn.is-system-activity { padding-top: 40px; padding-bottom: 40px; }
