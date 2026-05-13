@@ -1268,6 +1268,67 @@
     };
   }
 
+  // v2.5: paint the session menu in the topbar dropdown. Called every
+  // render; cheap because it only diffs the small list of sessions.
+  function paintSessionMenu(sessions) {
+    const menu = document.getElementById('session-menu');
+    const trigger = document.getElementById('session-trigger');
+    if (!menu || !trigger) return;
+    if (sessions.length <= 1) {
+      trigger.hidden = true;
+      menu.innerHTML = '';
+      return;
+    }
+    trigger.hidden = false;
+    // Trigger label = the currently-active session's first prompt (or id).
+    const active = sessions.find(s => s.id === activeSessionForView) || sessions[0];
+    const idEl = document.getElementById('session-trigger-id');
+    if (idEl) idEl.textContent = (active.firstPromptText || active.id).slice(0, 64);
+
+    let html = `<div class="menu-head">sessions · ${sessions.length}</div>`;
+    sessions.forEach(s => {
+      const isAct = s.id === activeSessionForView;
+      const title = s.firstPromptText || s.id;
+      const sub = `${s.id} · ${s.turns || 0} turn${s.turns === 1 ? '' : 's'} · ${s.events} events` + (s.failures ? ` · ${s.failures} failed` : '');
+      const ageLabel = s.status === 'active' ? 'live' : s.status;
+      const ageRel = rel(s.lastTs);
+      html += `<div class="item${isAct ? ' is-active' : ''}" role="menuitem" data-session="${escapeHtml(s.id)}">
+        <div>
+          <div class="title"><span class="pip ${s.status}"></span>${escapeHtml(title)}</div>
+          <div class="sub">${escapeHtml(sub)}</div>
+        </div>
+        <div class="right">${escapeHtml(ageLabel)}<br>${escapeHtml(ageRel)}</div>
+      </div>`;
+    });
+    menu.innerHTML = html;
+    menu.querySelectorAll('.item').forEach(item => {
+      item.addEventListener('click', () => {
+        activeSessionForView = item.dataset.session;
+        // Do NOT touch activeSession — that's the filter chip; the dropdown
+        // only switches WHICH session the multi-session view shows.
+        writeHash();
+        menu.classList.remove('is-open');
+        document.getElementById('scrim')?.classList.remove('is-open');
+        document.getElementById('session-trigger')?.setAttribute('aria-expanded', 'false');
+        render();
+      });
+    });
+  }
+
+  // v2.5: keep the filter-trigger pill in sync with active filter count.
+  function updateFilterBadge() {
+    let n = 0;
+    if (activeStatus !== 'all') n++;
+    if (activeAgent !== 'all') n++;
+    if (activeTimeRange !== 'all') n++;
+    if (searchQuery && searchQuery.trim()) n++;
+    if (decisionsOnly) n++;
+    const btn = document.getElementById('filter-trigger');
+    const ct  = document.getElementById('filter-trigger-count');
+    if (ct)  ct.textContent = String(n);
+    if (btn) btn.classList.toggle('is-empty', n === 0);
+  }
+
   function renderMultiSession(root, nodes, sessionIds) {
     const sessions = sessionIds.map(sid => buildSessionMeta(nodes, sid));
     const statusOrder = { active: 0, stale: 1, inactive: 2 };
@@ -1281,6 +1342,19 @@
       activeSessionForView = sessions[0]?.id || null;
     }
 
+    // v2.5: paint the topbar dropdown instead of the old sidebar. Then
+    // render the ACTIVE session's turns directly into root — no sidebar,
+    // no shell, no pane container. The chrome lives in the topbar now.
+    paintSessionMenu(sessions);
+    const selected = sessions.find(s => s.id === activeSessionForView);
+    if (selected) {
+      const selNodes = nodes.filter(n => (n.session || 'main') === selected.id);
+      const turns = groupIntoTurns(selNodes).reverse();
+      turns.forEach(t => root.appendChild(renderTurn(t)));
+      return;
+    }
+
+    // Fallback (should be unreachable now): legacy sidebar layout.
     const shell = el('div','viewer-shell is-multi');
 
     // v1.8: status-grouped sidebar with compact one-line rows.
@@ -2162,6 +2236,26 @@
     renderStatsRibbon(allNodes);
     renderFailureBanner(allNodes);
     buildFilters();
+    updateFilterBadge();
+    // v2.5: always repaint the session dropdown from the full session list
+    // (not the filtered view). Lets the user switch sessions even when
+    // they've drilled into one via the filter chips.
+    const allSessionIds = Array.from(new Set(allNodes.map(n => (n.session || 'main'))));
+    if (allSessionIds.length > 1) {
+      const allSessions = allSessionIds.map(sid => buildSessionMeta(allNodes, sid));
+      const statusOrder = { active: 0, stale: 1, inactive: 2 };
+      allSessions.sort((a, b) => {
+        const so = statusOrder[a.status] - statusOrder[b.status];
+        if (so !== 0) return so;
+        return (b.lastTs || '').localeCompare(a.lastTs || '');
+      });
+      if (!activeSessionForView || !allSessions.find(s => s.id === activeSessionForView)) {
+        activeSessionForView = allSessions[0]?.id || null;
+      }
+      paintSessionMenu(allSessions);
+    } else {
+      paintSessionMenu([]);
+    }
     applyViewMode();
   }
 
@@ -2347,6 +2441,55 @@
       document.querySelectorAll('#view-mode button').forEach(b => b.classList.toggle('is-active', b === btn));
       applyViewMode();
     });
+
+    // v2.5 — topbar chrome wiring: filter overlay, session dropdown, scrim.
+    (function wireEditorialChrome() {
+      const overlay = document.getElementById('filter-overlay');
+      const overlayBtn = document.getElementById('filter-trigger');
+      const sessionBtn = document.getElementById('session-trigger');
+      const menu = document.getElementById('session-menu');
+      const scrim = document.getElementById('scrim');
+      if (!overlay || !overlayBtn || !scrim) return;
+      function setOverlay(open) {
+        overlay.classList.toggle('is-open', open);
+        overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+        overlayBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // CSS uses [hidden]; clear it whenever a panel needs to animate in.
+        if (open) overlay.hidden = false;
+        scrim.classList.toggle('is-open', open || (menu && menu.classList.contains('is-open')));
+      }
+      function setMenu(open) {
+        if (!menu) return;
+        if (open) menu.hidden = false;
+        menu.classList.toggle('is-open', open);
+        if (sessionBtn) sessionBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        scrim.classList.toggle('is-open', open || overlay.classList.contains('is-open'));
+      }
+      function closeAll() { setOverlay(false); setMenu(false); }
+
+      overlayBtn.addEventListener('click', () => {
+        const wasOpen = overlay.classList.contains('is-open');
+        setMenu(false);
+        setOverlay(!wasOpen);
+      });
+      if (sessionBtn) sessionBtn.addEventListener('click', () => {
+        const wasOpen = menu && menu.classList.contains('is-open');
+        setOverlay(false);
+        setMenu(!wasOpen);
+      });
+      scrim.addEventListener('click', closeAll);
+      document.getElementById('filter-close')?.addEventListener('click', () => setOverlay(false));
+      document.getElementById('filter-reset')?.addEventListener('click', () => {
+        activeStatus = 'all'; activeAgent = 'all'; activeTimeRange = 'all';
+        customFrom = ''; customTo = ''; searchQuery = '';
+        const s = document.getElementById('search'); if (s) s.value = '';
+        writeHash();
+        render();
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeAll();
+      });
+    })();
     document.addEventListener('keydown', e => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault(); document.getElementById('search').focus();

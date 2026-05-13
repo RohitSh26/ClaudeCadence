@@ -2,6 +2,38 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
+## [2.5.0] – 2026-05-13
+
+### Added — editorial chrome (port of the design prototype, step 1)
+- **Sticky thin topbar** replaces the previous always-expanded filter strip. Layout: `claudecadence`-mark · project name in serif italic · session dropdown · filter pill · sun/moon toggle.
+- **Collapsible filter overlay** slides down from the topbar when you click the `filter` pill. The chip count badge on the pill shows how many filters are active. Contains status / agent / time / view + the search field; the live-meter and version-tag moved into the overlay's footer.
+- **Centered session dropdown** replaces the left sessions sidebar that used to dominate multi-session projects. Trigger lives in the topbar; click to open a menu listing every session in the project with its status pip, first-prompt title, turn count, and elapsed time. Click a session to switch the view.
+- **Scrim** dims the page when either overlay is open. Click scrim or hit `Esc` to close.
+
+### Changed
+- The old `.app-header` / `.filter-strip` / `.session-strip` h1 chrome is hidden by CSS overrides — the markup is gone and the rules don't match anymore, but the dormant rules are kept for one release in case anyone has a pinned cache.
+- `renderMultiSession` no longer builds a left sidebar; the active session's turns are rendered directly into `#timeline`. The dropdown owns session switching.
+- `paintSessionMenu()` is called every render with the *unfiltered* session list, so the dropdown stays accessible even when filters narrow the visible nodes to one session.
+
+### Note
+- This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
+
+## [2.5.0] – 2026-05-13
+
+### Added — editorial chrome (port of the design prototype, step 1)
+- **Sticky thin topbar** replaces the previous always-expanded filter strip. Layout: `claudecadence`-mark · project name in serif italic · session dropdown · filter pill · sun/moon toggle.
+- **Collapsible filter overlay** slides down when you click the `filter` pill. The chip count badge on the pill shows how many filters are active. Contains status / agent / time / view + search; the live-meter and version-tag moved into the overlay's footer.
+- **Centered session dropdown** replaces the left sessions sidebar. Trigger lives in the topbar; click to open a menu listing every session with status pip, first-prompt title, turn count, and elapsed time.
+- **Scrim** dims the page when either overlay is open. Click scrim or `Esc` to close.
+
+### Changed
+- `renderMultiSession` no longer builds a left sidebar; the active session's turns render directly into `#timeline`.
+- `paintSessionMenu()` is called every render with the *unfiltered* session list — the dropdown stays accessible even when filters narrow to one session.
+- Old `.app-header` / `.filter-strip` markup removed from `index.html`. Dormant CSS for those selectors kept one release for safety.
+
+### Note
+- Step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer; step 3 the full-bleed reading-feed layout. Prototype at `docs/design/index.html` is the reference.
+
 ## [2.4.0] – 2026-05-13
 
 ### Added
