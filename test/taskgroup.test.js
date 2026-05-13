@@ -61,4 +61,18 @@ suite('extractTaskNotice', () => {
     assertEq(n.status, 'ok');
     assertEq(n.summary, '1024 rows shipped');
   });
+  test('v2.6.1: prefers <summary> over verbose cleaned text', () => {
+    const n = lib.extractTaskNotice('<task-notification><task-id>X</task-id><summary>Monitor event: "Phase 3 progress"</summary><event>[abl3] cell failed: matmul Input operand 1 mismatch in core dimension 0</event></task-notification>');
+    assertEq(n.status, 'Monitor event: "Phase 3 progress"');
+  });
+  test('v2.6.1: falls through summary → event when no status/summary', () => {
+    const n = lib.extractTaskNotice('<task-notification><task-id>X</task-id><event>OOM at step 4</event></task-notification>');
+    assertEq(n.status, 'OOM at step 4');
+  });
+  test('v2.6.1: caps very long status with word-boundary ellipsis', () => {
+    const long = 'A'.repeat(300);
+    const n = lib.extractTaskNotice(`<task-notification><status>${long}</status></task-notification>`);
+    assert(n.status.length <= 201, 'status should be capped near 200 chars, got ' + n.status.length);
+    assert(n.status.endsWith('…') || n.status.endsWith('A'), 'should end with ellipsis or character');
+  });
 });

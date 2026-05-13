@@ -1466,6 +1466,18 @@
   function isPromptNode(n) {
     return (n.tags || []).indexOf('prompt') !== -1 || (n.agent === 'founder' && n.kind !== 'decision');
   }
+  // v2.6.1 — detect legacy "prompt" nodes that were actually harness pseudo-
+  // prompts (task-notification, autonomous-loop, command-*). Pre-v2.4 hook
+  // captured these as fresh prompts; the v2.4 UPS filter prevents new ones
+  // but the old captures persist. We hide them from the timeline.
+  const HARNESS_HEAD_RE = /^<+(task-notification|system-reminder|local-command-|command-name|command-message|command-args|command-stdout|command-stderr|autonomous-loop)/;
+  function isHarnessPromptNode(n) {
+    if (!n) return false;
+    if ((n.tags || []).indexOf('prompt') === -1) return false;
+    const blocks = n.blocks || [];
+    const raw = ((blocks[0] && blocks[0].value) || n.title || '').trim();
+    return HARNESS_HEAD_RE.test(raw);
+  }
   function isResponseNode(n) {
     return n.kind === 'response' && n.agent === 'orchestrator' && (n.tags || []).indexOf('response') !== -1;
   }
@@ -1914,37 +1926,75 @@
     return childTargetText(c) || '(unknown file)';
   }
 
-  // Split a long prompt into an h1 "first sentence" + lede "rest". Hard-cut
-  // at 220 chars so a paragraph-long opening line doesn't become a banner.
-  // Also strips harness-injected image placeholders ("[Image #3]") from the
-  // hero text and counts how many were present so the caller can surface
-  // a "📎 image attached" indicator separately. v2.5.4.
+  // v2.6.1: take the full prompt and split into:
+  //   h1   — first markdown heading (`# …`), first sentence, or first line
+  //   body — everything else, as raw markdown text (caller renders it)
+  // No more 400-char lede cap that was clipping long prompts. The body is
+  // returned RAW for the caller to feed into the markdown renderer; h1 is
+  // already HTML-escaped and capped at 220 chars on a word boundary so the
+  // hero never overflows.
   function splitPromptForHero(prompt) {
     let raw = ((prompt.blocks && prompt.blocks[0] && prompt.blocks[0].value) || prompt.title || '').trim();
-    // Strip image placeholders so they don't show as literal text in the
-    // editorial h1. The image bytes themselves live in the transcript as
-    // base64 message blocks; extracting them is a separate, larger change.
+    // Strip "[Image #N]" placeholders — image bytes are attached as image
+    // blocks since v2.6 so the placeholders are noise.
     const imageMarkerRe = /\[Image\s*(?:#\d+|attached)?\]/gi;
     const imageMatches = raw.match(imageMarkerRe) || [];
     if (imageMatches.length) {
-      raw = raw.replace(imageMarkerRe, '').replace(/\s{2,}/g, ' ').trim();
+      raw = raw.replace(imageMarkerRe, '').replace(/[ \t]{2,}/g, ' ').trim();
     }
     if (!raw) {
-      return { h1: imageMatches.length ? '(image attached)' : '(empty prompt)', lede: '', attachments: imageMatches.length };
+      return { h1: imageMatches.length ? '(image attached)' : '(empty prompt)', body: '', attachments: imageMatches.length };
     }
-    const m = raw.match(/^([^\n]+?[.!?])\s+([\s\S]+)$/);
-    let h1, lede;
-    if (m && m[1].length <= 220) { h1 = m[1]; lede = m[2]; }
-    else { h1 = raw; lede = ''; }
+
+    // Markdown heading? Treat the heading text as h1 and the rest as body.
+    const headingM = raw.match(/^#{1,6}\s+(.+?)(?:\n([\s\S]+))?$/);
+    if (headingM) {
+      let h1 = headingM[1].trim();
+      if (h1.length > 220) {
+        const cut = h1.lastIndexOf(' ', 220);
+        h1 = h1.slice(0, cut > 0 ? cut : 220) + '…';
+      }
+      return {
+        h1: escapeHtml(h1),
+        body: headingM[2] ? headingM[2].trim() : '',
+        attachments: imageMatches.length,
+      };
+    }
+
+    // Sentence boundary on a single line — first sentence is the h1, the
+    // remainder is the body.
+    const sentenceM = raw.match(/^([^\n]+?[.!?])(?:\s+|\n+)([\s\S]+)$/);
+    if (sentenceM && sentenceM[1].length <= 220) {
+      return {
+        h1: escapeHtml(sentenceM[1]),
+        body: sentenceM[2],
+        attachments: imageMatches.length,
+      };
+    }
+
+    // No sentence break — split on the first newline if one exists within a
+    // sane h1 budget. Otherwise hard-cap the h1 at 220 chars on a word
+    // boundary AND keep the full prompt as body so nothing is lost.
+    const nl = raw.indexOf('\n');
+    if (nl > 0 && nl <= 220) {
+      return {
+        h1: escapeHtml(raw.slice(0, nl).trim()),
+        body: raw.slice(nl).trim(),
+        attachments: imageMatches.length,
+      };
+    }
+    let h1 = raw;
+    let body = '';
     if (h1.length > 220) {
       const cut = h1.lastIndexOf(' ', 220);
       h1 = h1.slice(0, cut > 0 ? cut : 220) + '…';
+      body = raw;   // keep the FULL prompt visible in the body
     }
-    if (lede.length > 400) {
-      const cut = lede.lastIndexOf(' ', 400);
-      lede = lede.slice(0, cut > 0 ? cut : 400) + '…';
-    }
-    return { h1: escapeHtml(h1), lede: escapeHtml(lede), attachments: imageMatches.length };
+    return {
+      h1: escapeHtml(h1),
+      body,
+      attachments: imageMatches.length,
+    };
   }
 
   const TOOL_PHASE_LABEL = {
@@ -1999,12 +2049,10 @@
       const hero = el('section','prompt-hero');
       const isDecision = (turn.prompt.tags || []).indexOf('slash') !== -1 || turn.prompt.kind === 'decision';
       if (isDecision) hero.classList.add('decision');
-      // v2.5.2: sentence-aware split so the h1 doesn't truncate mid-word
-      // and the lede gets the rest of the first paragraph. v2.5.4: strips
-      // harness "[Image #N]" markers from the text. v2.6: real image
-      // blocks are now attached to the prompt; render them inline below
-      // the lede and use the real count for the attachment chip.
-      const { h1, lede, attachments: placeholderCount } = splitPromptForHero(turn.prompt);
+      // v2.6.1: hero is h1 + (optional) full markdown body. Long prompts
+      // (your 104-line spec) render in full — no more 400-char lede cap.
+      // Real image blocks (v2.6) attach as figures after the body.
+      const { h1, body, attachments: placeholderCount } = splitPromptForHero(turn.prompt);
       const imageBlocks = (turn.prompt.blocks || []).filter(b => b && b.type === 'image');
       const totalAttachments = Math.max(imageBlocks.length, placeholderCount);
       let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span>`;
@@ -2017,10 +2065,35 @@
       }
       heroHtml += `</div>`;
       heroHtml += `<h1>${h1}</h1>`;
-      if (lede) heroHtml += `<p class="lede">${lede}</p>`;
       hero.innerHTML = heroHtml;
-      // Append real image blocks (v2.6) — go after the prose, before the
-      // phase anchors start. Each image is a <figure>.
+
+      // Full body — markdown-rendered. If > 1500 chars, wrap in a <details>
+      // collapsed by default with a "show full prompt · N lines" summary so
+      // very long specs don't dominate the turn visually until the user
+      // clicks to read them.
+      if (body) {
+        const COLLAPSE_AT = 1500;
+        const lineCount = body.split('\n').length;
+        if (body.length > COLLAPSE_AT) {
+          const det = document.createElement('details');
+          det.className = 'prompt-body-collapsible';
+          const sum = document.createElement('summary');
+          sum.textContent = `show full prompt · ${lineCount} lines · ${body.length.toLocaleString()} chars`;
+          det.appendChild(sum);
+          const inner = document.createElement('div');
+          inner.className = 'prompt-body';
+          inner.innerHTML = simpleMd(body);
+          det.appendChild(inner);
+          hero.appendChild(det);
+        } else {
+          const div = document.createElement('div');
+          div.className = 'prompt-body';
+          div.innerHTML = simpleMd(body);
+          hero.appendChild(div);
+        }
+      }
+
+      // Image blocks come last so they sit below the prompt body.
       imageBlocks.forEach(b => {
         const r = renderers.image;
         if (r) hero.appendChild(r(b));
@@ -2258,7 +2331,9 @@
       if (a.ts === b.ts) return (a.id||'').localeCompare(b.id||'');
       return (a.ts||'').localeCompare(b.ts||'');
     });
-    const visible = allNodes.filter(matches);
+    // v2.6.1: hide legacy harness-pseudo-prompts (task-notification / command-*
+     // captured as prompts pre-v2.4) so they don't pollute the editorial feed.
+    const visible = allNodes.filter(matches).filter(n => !isHarnessPromptNode(n));
     const root = document.getElementById('timeline');
 
     const sessionIds = Array.from(new Set(visible.map(n => n.session || 'main')));

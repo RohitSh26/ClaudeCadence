@@ -18,6 +18,16 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.6.1] – 2026-05-13
+
+### Fixed
+- **Long prompts no longer truncated.** The old `splitPromptForHero` capped the lede at 400 chars; a 104-line markdown spec lost most of its body. Refactored to: `h1` is the first markdown heading or first sentence (still capped at 220 chars on a word boundary), and `body` is the full remainder rendered as markdown below the h1. Prompts longer than 1500 chars wrap in a `<details>` with `show full prompt · N lines · M chars` so they don't dominate the turn visually until clicked.
+- **Cleaner Monitor-event status lines.** `extractTaskNotice` now prefers the harness's structured fields in order `<status>` → `<summary>` → `<event>` over the verbose cleaned-text fallback. Without this Monitor events ended up with the entire stripped XML on one line in the task-group row. Status caps at 200 chars on a word boundary.
+- **Legacy harness pseudo-prompts hidden from the timeline.** Pre-v2.4 captures of `<task-notification>` / `<command-name>` / `<autonomous-loop>` etc. as fresh prompt nodes are now filtered out at render time via `isHarnessPromptNode`. The v2.4 UPS guard prevents new ones; this hides the old ones too without touching `nodes.js`.
+
+### Tests
+- 3 new cases in `test/taskgroup.test.js` covering the summary/event fallback and the length cap. Total 78 (was 75).
+
 ## [2.6.0] – 2026-05-13
 
 ### Added — real image attachments

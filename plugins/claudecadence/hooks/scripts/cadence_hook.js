@@ -522,13 +522,29 @@ function extractTaskId(text) {
 // fixed string so the renderer always has something readable.
 function extractTaskNotice(text) {
   const t = String(text || '');
-  const statusM = t.match(/<status>\s*([^<]+?)\s*<\/status>/);
+  const statusM  = t.match(/<status>\s*([^<]+?)\s*<\/status>/);
   const summaryM = t.match(/<summary>\s*([\s\S]+?)\s*<\/summary>/);
-  const cleaned = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  const firstLine = cleaned.split('\n')[0].trim();
+  const eventM   = t.match(/<event>\s*([\s\S]+?)\s*<\/event>/);
+  // Prefer the harness's structured fields (<status> → <summary> → <event>)
+  // over the cleaned-text fallback. Without this preference, Monitor events
+  // ended up with the entire stripped XML on a single line, which read as
+  // alien noise against the editorial typography. v2.6.1.
+  let status;
+  if (statusM)       status = statusM[1].trim();
+  else if (summaryM) status = summaryM[1].trim();
+  else if (eventM)   status = eventM[1].trim();
+  else {
+    const cleaned = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    status = cleaned.split('\n')[0].trim() || 'update';
+  }
+  // Cap status length so an entire stack trace doesn't become the row title.
+  if (status.length > 200) {
+    const cut = status.lastIndexOf(' ', 200);
+    status = status.slice(0, cut > 0 ? cut : 200) + '…';
+  }
   return {
-    status:  (statusM && statusM[1].trim()) || firstLine || 'update',
-    summary: (summaryM && summaryM[1].trim()) || cleaned.slice(0, 240),
+    status,
+    summary: (summaryM && summaryM[1].trim()) || status.slice(0, 240),
   };
 }
 

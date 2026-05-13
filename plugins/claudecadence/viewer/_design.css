@@ -4901,3 +4901,100 @@ li.turn > .prompt-hero figure.block.image figcaption {
   color: var(--mid);
   border-top: 1px solid var(--soft);
 }
+
+/* v2.6.1 — full prompt body rendered as markdown below the h1.
+   Long prompts (>1500 chars) wrap in a <details> so the turn stays
+   compact until the user clicks. */
+li.turn > .prompt-hero .prompt-body {
+  margin-top: 18px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--neutral-700);
+  max-width: 80ch;
+}
+li.turn > .prompt-hero .prompt-body p { margin: 10px 0; }
+li.turn > .prompt-hero .prompt-body ul,
+li.turn > .prompt-hero .prompt-body ol { margin: 10px 0; padding-left: 22px; }
+li.turn > .prompt-hero .prompt-body li { margin-bottom: 4px; }
+li.turn > .prompt-hero .prompt-body h2,
+li.turn > .prompt-hero .prompt-body h3,
+li.turn > .prompt-hero .prompt-body h4 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  margin: 22px 0 8px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+li.turn > .prompt-hero .prompt-body h2 { font-size: 22px; }
+li.turn > .prompt-hero .prompt-body h3 { font-size: 18px; }
+li.turn > .prompt-hero .prompt-body h4 { font-size: 16px; color: var(--apricot-700); }
+li.turn > .prompt-hero .prompt-body code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bone);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--graphite);
+}
+li.turn > .prompt-hero .prompt-body pre {
+  background: var(--bone);
+  border-left: 2px solid var(--neutral-300);
+  padding: 10px 14px;
+  margin: 12px 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+li.turn > .prompt-hero .prompt-body blockquote {
+  border-left: 2px solid var(--apricot-500);
+  padding: 4px 14px;
+  margin: 12px 0;
+  color: var(--mid);
+  font-style: italic;
+}
+li.turn > .prompt-hero .prompt-body table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  margin: 10px 0;
+}
+li.turn > .prompt-hero .prompt-body th,
+li.turn > .prompt-hero .prompt-body td {
+  border-bottom: 1px dotted var(--soft);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+li.turn > .prompt-hero details.prompt-body-collapsible {
+  margin-top: 18px;
+}
+li.turn > .prompt-hero details.prompt-body-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--mid);
+  padding: 8px 0;
+  border-top: 1px dotted var(--soft);
+  border-bottom: 1px dotted var(--soft);
+}
+li.turn > .prompt-hero details.prompt-body-collapsible > summary::-webkit-details-marker { display: none; }
+li.turn > .prompt-hero details.prompt-body-collapsible > summary::before {
+  content: '▸ ';
+  display: inline-block;
+  width: 16px;
+  color: var(--neutral-400);
+  transition: transform 120ms ease;
+}
+li.turn > .prompt-hero details.prompt-body-collapsible[open] > summary::before {
+  content: '▾ ';
+}
+li.turn > .prompt-hero details.prompt-body-collapsible[open] > summary {
+  border-bottom: none;
+}
+li.turn > .prompt-hero details.prompt-body-collapsible > .prompt-body {
+  margin-top: 14px;
+}
