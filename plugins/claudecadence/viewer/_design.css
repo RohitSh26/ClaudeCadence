@@ -4608,3 +4608,26 @@ li.turn > .response .block code {
    selectors in the older CSS sections above. */
 .workspace .timeline > li.turn > details.turn-card,
 .workspace .timeline > li.turn > .turn-strip { display: none; }
+
+/* v2.5.2 — long-text wrap. Bash commands, file paths, and other monospace
+   strings often have no spaces; let them break on any boundary so they
+   stay within the column instead of forcing horizontal page scroll. */
+li.turn ul.ledger > li {
+  align-items: flex-start;
+}
+li.turn ul.ledger > li > .what,
+li.turn ul.ledger > li > .t,
+li.turn ul.ledger > li > .tag {
+  min-width: 0;
+}
+li.turn ul.ledger .what {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+li.turn ul.ledger .what .dim { color: var(--neutral-400); }
+li.turn table.rollup td.path {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+li.turn table.rollup td.path .dim { color: var(--neutral-400); }

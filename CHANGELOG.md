@@ -18,6 +18,17 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.5.2] – 2026-05-13
+
+### Fixed
+- **Rollup table parse bug.** v2.5.1's edit-rollup wrote `<thead>…<tbody>…</tbody></table>` into a `<div>` wrapper without a parent `<table>` tag. Browsers stripped the orphan table markup and dumped the cell text inline (visible as `filechangeat/Users/edhaa/...`). The unbreakable file-path string then forced horizontal page overflow that made every other row look broken. Now sets `innerHTML` on the `<table>` element directly.
+- **Long-text wrap in ledger + rollup.** Added `overflow-wrap: anywhere` / `word-break: break-word` and `min-width: 0` on grid items so unbreakable monospace strings (URLs, file paths, full bash invocations) wrap inside their column.
+- **Prompt hero truncation.** Hero h1 was the 96-char-truncated `title` (long prompts ended in `ve…`). Now reads `blocks[0].value` and splits on the first sentence boundary; h1 capped at 220 chars on a word boundary, lede at 400.
+- **File-path extraction for legacy edits.** Pre-v2.2 nodes without `file_path` get their path parsed from titles like `Edited /path/to/foo.rb`.
+
+### Changed
+- Removed the dead `_legacyRenderTurn` stub left from v2.5.1.
+
 ## [2.5.1] – 2026-05-13
 
 ### Added — editorial turn body (port step 2)

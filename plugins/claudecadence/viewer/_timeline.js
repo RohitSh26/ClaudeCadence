@@ -1881,6 +1881,45 @@
   }
 
   // ── tool → phase label mapping (v2.5 editorial) ──────────────────────
+  // Best-effort file path for an edit/write node. Prefers c.file_path (set
+  // by the v2.2+ hook), falls back to parsing legacy titles like
+  // "Edited /Users/.../foo.rb" so older nodes still render cleanly.
+  function extractFilePathFromChild(c) {
+    if (c && c.file_path) return c.file_path;
+    const t = (c && c.title) || '';
+    const m = t.match(/^(?:Wrote|Edited|Edited \(multi\)|Edited notebook|Touched)\s+(.+)$/);
+    if (m) return m[1].trim();
+    return childTargetText(c) || '(unknown file)';
+  }
+
+  // Split a long prompt into an h1 "first sentence" + lede "rest". Hard-cut
+  // at 200 chars so a paragraph-long opening line doesn't become a banner.
+  // Returns { h1, lede } — both already escaped for safe HTML insertion.
+  function splitPromptForHero(prompt) {
+    const raw = ((prompt.blocks && prompt.blocks[0] && prompt.blocks[0].value) || prompt.title || '').trim();
+    if (!raw) return { h1: '(empty prompt)', lede: '' };
+    // First sentence boundary if it ends with . ! ? followed by whitespace.
+    const m = raw.match(/^([^\n]+?[.!?])\s+([\s\S]+)$/);
+    let h1, lede;
+    if (m && m[1].length <= 220) {
+      h1 = m[1];
+      lede = m[2];
+    } else {
+      h1 = raw;
+      lede = '';
+    }
+    if (h1.length > 220) {
+      const cut = h1.lastIndexOf(' ', 220);
+      h1 = h1.slice(0, cut > 0 ? cut : 220) + '…';
+    }
+    // Cap lede so it doesn't dominate the page when the prompt is huge.
+    if (lede.length > 400) {
+      const cut = lede.lastIndexOf(' ', 400);
+      lede = lede.slice(0, cut > 0 ? cut : 400) + '…';
+    }
+    return { h1: escapeHtml(h1), lede: escapeHtml(lede) };
+  }
+
   const TOOL_PHASE_LABEL = {
     read:   'Read & locate',
     search: 'Search',
@@ -1933,11 +1972,13 @@
       const hero = el('section','prompt-hero');
       const isDecision = (turn.prompt.tags || []).indexOf('slash') !== -1 || turn.prompt.kind === 'decision';
       if (isDecision) hero.classList.add('decision');
-      const promptTitle = turn.prompt.title || '(empty prompt)';
-      const hasLede = turn.prompt.summary && turn.prompt.summary !== turn.prompt.title;
+      // v2.5.2: sentence-aware split so the h1 doesn't truncate mid-word
+      // and the lede gets the rest of the first paragraph. Falls back to
+      // title-only for empty or single-sentence prompts.
+      const { h1, lede } = splitPromptForHero(turn.prompt);
       let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span></div>`;
-      heroHtml += `<h1>${escapeHtml(promptTitle)}</h1>`;
-      if (hasLede) heroHtml += `<p class="lede">${escapeHtml(turn.prompt.summary)}</p>`;
+      heroHtml += `<h1>${h1}</h1>`;
+      if (lede) heroHtml += `<p class="lede">${lede}</p>`;
       hero.innerHTML = heroHtml;
       li.appendChild(hero);
     } else {
@@ -1999,20 +2040,24 @@
 
         // Body: rollup table for edits, ledger list otherwise.
         if (tool === 'edit') {
+          // v2.5.2 — set innerHTML on the <table> directly. The previous
+          // version wrote `<thead>...<tbody>...</tbody></table>` into a
+          // <div> wrapper; browsers strip orphan <thead>/<tbody> tags when
+          // they aren't inside a <table>, leaving the cell text concatenated
+          // on one line. That one giant unbreakable URL forced the page
+          // wider than the viewport and made every other row look broken.
           const tbl = document.createElement('table');
           tbl.className = 'rollup';
           let html = '<thead><tr><th>file</th><th>change</th><th>at</th></tr></thead><tbody>';
           items.forEach(c => {
-            const file = escapeHtml(c.file_path || c.title || childTargetText(c));
+            const file = escapeHtml(extractFilePathFromChild(c));
             const a = c.lines_added ? `<span class="add">+${c.lines_added}</span>` : '';
             const d = c.lines_removed ? `<span class="del">−${c.lines_removed}</span>` : '';
             html += `<tr><td class="path">${file}</td><td class="delta">${a}${a && d ? ' ' : ''}${d}</td><td class="t">${escapeHtml(shortTime(c.ts))}</td></tr>`;
           });
-          html += '</tbody></table>';
-          tbl.outerHTML; // no-op for lint
-          const wrap = document.createElement('div');
-          wrap.innerHTML = html;
-          li.appendChild(wrap.firstChild);
+          html += '</tbody>';
+          tbl.innerHTML = html;
+          li.appendChild(tbl);
         } else {
           const ul = document.createElement('ul');
           ul.className = 'ledger';
@@ -2061,134 +2106,6 @@
       li.appendChild(resp);
     }
 
-    return li;
-  }
-
-  // ── legacy renderTurn body kept below for reference, unreachable ──
-  /* eslint-disable */
-  function _legacyRenderTurn(turn) {
-    // (legacy v2.4 body intentionally retained but no longer called)
-    if (turn.children.length) {
-      const turnKey = (turn.id || turn.prompt?.id || (turn.children[0] && turn.children[0].id) || 'orphan');
-      const childSection = el('div','turn-section');
-      childSection.appendChild(el('div','section-label', `during this turn · ${turn.children.length}`));
-
-      // v2.0: detect paired fork+merge by source_tool_use_id and cluster
-      // adjacent forks into one parallel-dispatch block (iter6 1→N→1 visual).
-      const dispatchClusters = collectDispatchGroups(turn.children);
-      const usedInDispatch = new Set();
-      for (const c of dispatchClusters) {
-        for (const lane of c.lanes) {
-          if (lane.fork)  usedInDispatch.add(lane.fork.id);
-          for (const m of lane.merges) usedInDispatch.add(m.id);
-        }
-      }
-      if (dispatchClusters.length) {
-        const dispatchSection = el('div','dispatch-groups');
-        dispatchClusters.forEach(c => dispatchSection.appendChild(renderDispatchGroup(c)));
-        childSection.appendChild(dispatchSection);
-      }
-
-      // Bucket remaining children by tool family.
-      const buckets = new Map();
-      turn.children.forEach(c => {
-        if (usedInDispatch.has(c.id)) return;
-        const tool = classifyChild(c);
-        if (!buckets.has(tool)) buckets.set(tool, []);
-        buckets.get(tool).push(c);
-      });
-
-      const groupsWrap = el('div','child-groups');
-      TOOL_ORDER.forEach(tool => {
-        const items = buckets.get(tool);
-        if (!items || !items.length) return;
-        const groupKey = `${turnKey}:${tool}`;
-        const isExpanded = expandedChildGroups.has(groupKey);
-        const showAll    = expandedShowAll.has(groupKey);
-        const visible = showAll ? items : items.slice(0, 5);
-        const lastTs = items[items.length - 1]?.ts;
-
-        const group = el('div','child-group');
-        group.dataset.tool = tool;
-        group.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-
-        const head = document.createElement('button');
-        head.type = 'button';
-        head.className = 'child-group-head';
-        head.innerHTML =
-          '<svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4l3 3 3-3"/></svg>' +
-          `<span class="tool-tag"><span class="swatch"></span>${escapeHtml(TOOL_LABELS[tool] || tool)}</span>` +
-          `<span class="count">${items.length}</span>` +
-          `<span class="summary">last <strong>${escapeHtml(shortTime(lastTs))}</strong></span>`;
-        // Collapse / expand the child-group locally — DO NOT call render().
-        // A full re-render rebuilds every <details> from scratch and loses
-        // the parent turn-card's open state. CSS reacts to aria-expanded so
-        // a local toggle is sufficient. stopPropagation prevents the click
-        // bubbling up to the parent <details>.
-        head.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const wasExpanded = group.getAttribute('aria-expanded') === 'true';
-          if (wasExpanded) {
-            group.setAttribute('aria-expanded', 'false');
-            expandedChildGroups.delete(groupKey);
-          } else {
-            group.setAttribute('aria-expanded', 'true');
-            expandedChildGroups.add(groupKey);
-          }
-        });
-        group.appendChild(head);
-
-        const groupBody = el('div','child-group-body');
-        visible.forEach(c => {
-          const row = childRow(c);
-          groupBody.appendChild(row);
-        });
-        if (items.length > 5 && !showAll) {
-          const more = document.createElement('button');
-          more.type = 'button';
-          more.className = 'more-link';
-          more.textContent = `show all ${items.length} ${TOOL_LABELS[tool] || tool} →`;
-          // Show-all also stays local — replace just this body's rows in-place.
-          more.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            expandedShowAll.add(groupKey);
-            expandedChildGroups.add(groupKey);
-            const newBody = el('div','child-group-body');
-            items.forEach(c => { newBody.appendChild(childRow(c)); });
-            groupBody.replaceWith(newBody);
-          });
-          groupBody.appendChild(more);
-        }
-        group.appendChild(groupBody);
-        groupsWrap.appendChild(group);
-      });
-      childSection.appendChild(groupsWrap);
-      body.appendChild(childSection);
-    }
-
-    // 3. Claude's response
-    if (turn.response) {
-      const respSection = el('div','turn-section turn-response');
-      respSection.appendChild(el('div','section-label','response'));
-      const inner = el('div','blocks');
-      if (turn.response.blocks && turn.response.blocks.length) {
-        turn.response.blocks.forEach(b => {
-          const r = renderers[b.type];
-          if (r) inner.appendChild(r(b));
-        });
-      } else {
-        const md = el('div','block md');
-        md.textContent = turn.response.title || '';
-        inner.appendChild(md);
-      }
-      respSection.appendChild(inner);
-      body.appendChild(respSection);
-    }
-
-    card.appendChild(body);
-    li.appendChild(card);
     return li;
   }
 
