@@ -5107,3 +5107,19 @@ li.turn.is-system-activity > .prompt-hero h1 {
 }
 li.turn.is-system-activity > .prompt-hero .eyebrow { display: none; }
 li.turn.is-system-activity { padding-top: 40px; padding-bottom: 40px; }
+
+/* v2.7.1 — legacy harness events render as compact rows so the data is
+   visible without bringing back the alien XML headlines. Same visual
+   register as .is-system-activity but with a different label. */
+li.turn.is-harness-event { padding-top: 32px; padding-bottom: 32px; }
+li.turn.is-harness-event > .prompt-hero { margin: 0; }
+li.turn.is-harness-event > .prompt-hero h1 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--neutral-400);
+  font-weight: 500;
+  font-style: normal;
+}
+li.turn.is-harness-event > .turn-meta { display: none; }

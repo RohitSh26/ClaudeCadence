@@ -1478,6 +1478,20 @@
     const raw = ((blocks[0] && blocks[0].value) || n.title || '').trim();
     return HARNESS_HEAD_RE.test(raw);
   }
+  // v2.7.1 — pull a readable status line out of a raw harness pseudo-prompt
+  // (task-notification, autonomous-loop, etc.). Mirrors the server-side
+  // extractTaskNotice logic: prefer <status>/<summary>/<event> tags over
+  // the verbose all-tags-stripped fallback. Caps at 120 chars.
+  function cleanHarnessSummary(raw) {
+    if (!raw) return 'system event';
+    const t = String(raw);
+    const m = t.match(/<status>\s*([^<]+?)\s*<\/status>/)
+           || t.match(/<summary>\s*([\s\S]+?)\s*<\/summary>/)
+           || t.match(/<event>\s*([\s\S]+?)\s*<\/event>/);
+    let s = m ? m[1].trim() : t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (s.length > 120) s = s.slice(0, 117).trim() + '…';
+    return s || 'system event';
+  }
   function isResponseNode(n) {
     return n.kind === 'response' && n.agent === 'orchestrator' && (n.tags || []).indexOf('response') !== -1;
   }
@@ -2062,7 +2076,17 @@
     li.appendChild(meta);
 
     // ─── 2. prompt hero ─────────────────────────────────────────────
-    if (turn.prompt) {
+    if (turn.prompt && isHarnessPromptNode(turn.prompt)) {
+      // v2.7.1: render legacy harness pseudo-prompts (pre-v2.4 captures of
+      // task-notifications etc.) as compact mono rows with cleaned text,
+      // not full editorial heroes. Data stays visible, alien XML gone.
+      li.classList.add('is-harness-event');
+      const raw = ((turn.prompt.blocks && turn.prompt.blocks[0] && turn.prompt.blocks[0].value) || turn.prompt.title || '').trim();
+      const cleaned = cleanHarnessSummary(raw);
+      const hero = el('section','prompt-hero');
+      hero.innerHTML = `<h1>background event · ${escapeHtml(cleaned)} · ${escapeHtml(shortTime(turn.ts))}</h1>`;
+      li.appendChild(hero);
+    } else if (turn.prompt) {
       const hero = el('section','prompt-hero');
       const isDecision = (turn.prompt.tags || []).indexOf('slash') !== -1 || turn.prompt.kind === 'decision';
       if (isDecision) hero.classList.add('decision');
@@ -2356,9 +2380,11 @@
       if (a.ts === b.ts) return (a.id||'').localeCompare(b.id||'');
       return (a.ts||'').localeCompare(b.ts||'');
     });
-    // v2.6.1: hide legacy harness-pseudo-prompts (task-notification / command-*
-     // captured as prompts pre-v2.4) so they don't pollute the editorial feed.
-    const visible = allNodes.filter(matches).filter(n => !isHarnessPromptNode(n));
+    // v2.7.1: KEEP legacy harness-pseudo-prompts in the feed (don't hide
+    // them — that loses data the user wants to scan). They render as
+    // compact mono "background event" rows via renderTurn's harness path
+    // below, instead of full editorial heroes.
+    const visible = allNodes.filter(matches);
     const root = document.getElementById('timeline');
 
     const sessionIds = Array.from(new Set(visible.map(n => n.session || 'main')));

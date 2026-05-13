@@ -18,6 +18,14 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.7.1] – 2026-05-13
+
+### Added
+- **Auto-`.gitignore` inside `.claude/cadence/`.** `bootstrapProject` now writes a `.gitignore` containing `*` into the per-project cadence directory on first hook fire. Git treats every file inside (viewer source, `nodes.js`, image attachments, bookkeeping) as ignored regardless of the project's root `.gitignore`. Users can never accidentally `git add` 4 MB of session log + screenshots. The file is idempotent (only created if absent) and is itself ignored by its own rule — `bootstrap` rewrites it on the next hook fire if you delete it.
+
+### Changed
+- **Legacy harness pseudo-prompts are visible again, rendered compactly.** v2.6.1 silently filtered out pre-v2.4 captures of `<task-notification>` etc. — but that lost data the user wanted to scan. Now those rows render as a compact mono `background event · <cleaned summary> · HH:MM` line (same register as `.is-system-activity`), with the `<status>` / `<summary>` / `<event>` tag extracted client-side via the new `cleanHarnessSummary` helper. The alien XML headline is gone; the data is restored.
+
 ## [2.7.0] – 2026-05-13
 
 ### Changed — UX overhaul (engineer-first, not magazine-first)
