@@ -4873,3 +4873,31 @@ li.turn > .prompt-hero .hero-attachment {
   border-color: color-mix(in oklab, var(--apricot-500) 30%, transparent);
   color: var(--apricot-600);
 }
+
+/* v2.6 — image attachment figure inside the prompt hero. */
+li.turn > .prompt-hero figure.block.image {
+  margin: 18px 0 6px;
+  padding: 0;
+  max-width: min(720px, 100%);
+  border: 1px solid var(--soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bone);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--ink) 5%, transparent);
+}
+[data-theme="dark"] li.turn > .prompt-hero figure.block.image {
+  background: var(--bone);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+li.turn > .prompt-hero figure.block.image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+li.turn > .prompt-hero figure.block.image figcaption {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mid);
+  border-top: 1px solid var(--soft);
+}

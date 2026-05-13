@@ -18,6 +18,17 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.6.0] – 2026-05-13
+
+### Added — real image attachments
+- When the user attaches a screenshot/photo to a prompt, the hook now extracts the base64 image bytes from the transcript (latest user-message with `image` content blocks), writes them to `.claude/cadence/images/<session>-<turn>-<idx>.<ext>`, and attaches a real `{type:'image', src}` block to the prompt node. The viewer renders the image inline in the prompt-hero as a `<figure>` with `<img>`, sage-ish bordered + drop-shadow on light, deep-shadow on dark.
+- Caps: 5 MB per image (base64 length), max 5 images per turn, 80-entry transcript lookback. Oversized images are silently skipped.
+- Attachment chip in the prompt-hero eyebrow ("📎 N images attached") now uses the real image-block count when present; falls back to the placeholder count for legacy prompts.
+- New `renderers.image` block renderer in `_timeline.js`.
+
+### Tests
+- New `test/images.test.js` with 7 cases covering missing file, no-image transcripts, latest-wins selection, max-count cap, oversized skip, media-type default, and lookback-window clamp. Total 75 tests (was 68).
+
 ## [2.5.4] – 2026-05-13
 
 ### Added

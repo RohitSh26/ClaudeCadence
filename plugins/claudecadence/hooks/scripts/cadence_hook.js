@@ -387,6 +387,69 @@ function sessionIdOf(payload) {
   return String(payload.session_id || 'main').slice(0, 12);
 }
 
+// ─── Image attachment extraction (v2.6) ──────────────────────────────────
+// When the user attaches a screenshot to a prompt, Claude Code injects a
+// `[Image #N]` placeholder into the prompt text and stores the actual bytes
+// as a `{type:'image', source:{type:'base64', media_type, data}}` block on
+// the corresponding user-message in the transcript. This helper walks the
+// transcript backwards looking for the LATEST user message whose content
+// is an array containing image blocks — that's the one that triggered this
+// UPS event. Caps: lookback 80 entries (cheap), 5 MB per image, max 5
+// images per turn. Returns [{ media_type, data }, ...] or [].
+const IMG_MAX_BYTES = 5 * 1024 * 1024;
+const IMG_MAX_COUNT = 5;
+const IMG_LOOKBACK = 80;
+
+function extractAttachedImages(transcriptPath) {
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) return [];
+  let raw; try { raw = fs.readFileSync(transcriptPath, 'utf8'); } catch (_) { return []; }
+  const lines = raw.split('\n').filter(Boolean);
+  const start = Math.max(0, lines.length - IMG_LOOKBACK);
+  for (let i = lines.length - 1; i >= start; i--) {
+    let o; try { o = JSON.parse(lines[i]); } catch (_) { continue; }
+    if ((o.type || o.role) !== 'user') continue;
+    const c = o.message && o.message.content;
+    if (!Array.isArray(c)) continue;
+    const imgs = c.filter(b => b && b.type === 'image' && b.source && b.source.type === 'base64' && typeof b.source.data === 'string');
+    if (!imgs.length) continue;
+    const out = [];
+    for (const b of imgs) {
+      if (out.length >= IMG_MAX_COUNT) break;
+      if (b.source.data.length > IMG_MAX_BYTES) continue;       // skip oversized
+      out.push({ media_type: b.source.media_type || 'image/png', data: b.source.data });
+    }
+    return out;
+  }
+  return [];
+}
+
+// Write extracted images to .claude/cadence/images/<sid>-<tid>-<idx>.<ext>
+// and return { src, media_type, alt } block descriptors ready to attach to
+// the prompt node. Idempotent in practice — same (sid, tid, idx) on retry
+// rewrites the file. Failures fall through silently (image attachment is
+// a nice-to-have, never block prompt capture on disk errors).
+function persistAttachedImages(images, sessionId, turnId) {
+  if (!images || !images.length) return [];
+  const imgDir = path.join(CADENCE_DIR, 'images');
+  try { safeMkdir(imgDir); } catch (_) { return []; }
+  const out = [];
+  images.forEach((img, idx) => {
+    try {
+      const extFromMime = (img.media_type.split('/')[1] || 'png').replace(/[^a-z0-9]/g, '').toLowerCase();
+      const ext = extFromMime === 'jpeg' ? 'jpg' : extFromMime;
+      const name = `${sessionId}-${turnId}-${idx}.${ext}`;
+      fs.writeFileSync(path.join(imgDir, name), Buffer.from(img.data, 'base64'));
+      out.push({
+        type: 'image',
+        src: 'images/' + name,
+        alt: `Image ${idx + 1} attached to this prompt`,
+        media_type: img.media_type,
+      });
+    } catch (_) { /* fail-soft */ }
+  });
+  return out;
+}
+
 // v2.3 — language detection from file extension. Used by Write blocks so the
 // viewer can syntax-highlight the preview correctly. Conservative mapping;
 // unknown extensions fall back to 'text'.
@@ -586,6 +649,12 @@ function handleUserPrompt(payload) {
   let summary = prompt.slice(0, 160).replace(/\n/g, ' ').trim();
   if (prompt.length > 160) summary += '…';
   const blocks = [{ type: 'markdown', value: prompt.slice(0, 200000) }];
+  // v2.6: persist attached images (if any) and append as image blocks.
+  try {
+    const imgs = extractAttachedImages(payload.transcript_path);
+    const persisted = persistAttachedImages(imgs, session, tid);
+    persisted.forEach(b => blocks.push(b));
+  } catch (exc) { logErr(`image extract failed: ${exc && exc.message || exc}`); }
   return {
     agent: 'founder',
     kind: isSlash ? 'decision' : 'response',

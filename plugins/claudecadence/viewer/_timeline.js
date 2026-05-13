@@ -490,6 +490,7 @@
     markdown:     renderMarkdown,
     table:        renderTable,
     code:         renderCode,
+    image:        renderImage,
     diagram:      renderDiagram,
     chart:        renderSparkline,           // legacy alias
     sparkline:    renderSparkline,
@@ -545,6 +546,27 @@
     div.appendChild(wrap.firstChild);
     return div;
   }
+  // v2.6 — image block renderer. The hook persists attached screenshots to
+  // .claude/cadence/images/<file> and attaches an image block per file to
+  // the prompt node (src is a relative URL the cadence server already
+  // serves). Wrapped in <figure> so a caption can be added later.
+  function renderImage(b) {
+    const fig = document.createElement('figure');
+    fig.className = 'block image';
+    const img = document.createElement('img');
+    img.src = b.src;
+    img.alt = b.alt || 'attached image';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    fig.appendChild(img);
+    if (b.caption) {
+      const cap = document.createElement('figcaption');
+      cap.textContent = b.caption;
+      fig.appendChild(cap);
+    }
+    return fig;
+  }
+
   function renderCode(b) {
     const div = el('div','block code');
     const lang = (b.lang || '').toLowerCase();
@@ -1979,17 +2001,30 @@
       if (isDecision) hero.classList.add('decision');
       // v2.5.2: sentence-aware split so the h1 doesn't truncate mid-word
       // and the lede gets the rest of the first paragraph. v2.5.4: strips
-      // harness "[Image #N]" markers and surfaces a small attachment chip.
-      const { h1, lede, attachments } = splitPromptForHero(turn.prompt);
+      // harness "[Image #N]" markers from the text. v2.6: real image
+      // blocks are now attached to the prompt; render them inline below
+      // the lede and use the real count for the attachment chip.
+      const { h1, lede, attachments: placeholderCount } = splitPromptForHero(turn.prompt);
+      const imageBlocks = (turn.prompt.blocks || []).filter(b => b && b.type === 'image');
+      const totalAttachments = Math.max(imageBlocks.length, placeholderCount);
       let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span>`;
-      if (attachments) {
-        const noun = attachments === 1 ? 'image' : `${attachments} images`;
-        heroHtml += ` <span class="hero-attachment" title="The hook captures only prompt text; image bytes live in the transcript">📎 ${noun} attached</span>`;
+      if (totalAttachments) {
+        const noun = totalAttachments === 1 ? 'image' : `${totalAttachments} images`;
+        const title = imageBlocks.length
+          ? 'click to see the attached image'
+          : 'image was attached; bytes not captured by this hook version';
+        heroHtml += ` <span class="hero-attachment" title="${escapeHtml(title)}">📎 ${noun} attached</span>`;
       }
       heroHtml += `</div>`;
       heroHtml += `<h1>${h1}</h1>`;
       if (lede) heroHtml += `<p class="lede">${lede}</p>`;
       hero.innerHTML = heroHtml;
+      // Append real image blocks (v2.6) — go after the prose, before the
+      // phase anchors start. Each image is a <figure>.
+      imageBlocks.forEach(b => {
+        const r = renderers.image;
+        if (r) hero.appendChild(r(b));
+      });
       li.appendChild(hero);
     } else {
       const orphan = el('section','prompt-hero');
