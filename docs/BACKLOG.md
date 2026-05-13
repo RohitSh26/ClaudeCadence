@@ -32,6 +32,19 @@ Things parked for after the next release.
 - `docs/COOKBOOK.md` — examples of customizing what gets recorded.
 - `CONTRIBUTING.md`.
 
+## Next up
+
+### Group task-notification entries per long-running task
+Long-running tasks (background scripts, agents that run for tens of minutes) emit `<task-notification>` updates every ~2 minutes. Today each one lands as its own row — a 10-minute task can produce 50+ near-identical timeline entries that visually drown the prompt and response.
+
+Goal: collapse N task-notifications referencing the same `task-id` into ONE row that shows the latest status + a count + a click-to-expand list of the individual notifications. Same pattern we use for tool groups (`read · 5`, `bash · 11`).
+
+Detection: `<task-notification>` blocks carry `<task-id>X</task-id>`. Group by that ID within a turn. Header row shows latest status, oldest start time, total count.
+
+Estimate ~2 hours. Touchpoints:
+- `cadence_hook.js` — detect repeated task-notifications and either fold at capture time or mark them with a `task_group_id` for the viewer to roll up.
+- `_timeline.js :: childRow` / `renderTurn` — collapsed group + expansion.
+
 ## Deferred from v2.2
 
 These were intentionally left out of the v2.2 bundle and need their own focused design pass.
