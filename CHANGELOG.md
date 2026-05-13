@@ -18,21 +18,21 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
-## [2.5.0] – 2026-05-13
+## [2.5.1] – 2026-05-13
 
-### Added — editorial chrome (port of the design prototype, step 1)
-- **Sticky thin topbar** replaces the previous always-expanded filter strip. Layout: `claudecadence`-mark · project name in serif italic · session dropdown · filter pill · sun/moon toggle.
-- **Collapsible filter overlay** slides down when you click the `filter` pill. The chip count badge on the pill shows how many filters are active. Contains status / agent / time / view + search; the live-meter and version-tag moved into the overlay's footer.
-- **Centered session dropdown** replaces the left sessions sidebar. Trigger lives in the topbar; click to open a menu listing every session with status pip, first-prompt title, turn count, and elapsed time.
-- **Scrim** dims the page when either overlay is open. Click scrim or `Esc` to close.
+### Added — editorial turn body (port step 2)
+- **Flat turn — no card chrome.** `renderTurn` now emits `<li class="turn">` with a meta strip, a typographic prompt hero, numbered phase anchors per tool family, ledger / rollup tool listings, and a sage-tinted response band. Matches `docs/design/index.html`.
+- **Prompt hero.** Source Serif 4 @ clamp(24px → 34px), italic "— you, Xm ago" eyebrow in apricot, optional lede paragraph from the prompt summary. Slash decisions render as a mono headline in apricot.
+- **Phase anchors** — `01 · Read & locate`, `02 · Edit & write`, `03 · Verify & run`, etc. Mono numeral in apricot, serif h2, mono stat line. Soft apricot tint behind the numeral column on light; thin apricot left rule on dark.
+- **Ledger + rollup bodies.** Reads / bash / search / web render as a compact mono ledger (timestamp · target · kind-tinted tag). Edits render as a rollup table (file · change · at) with `+N −M` deltas in green/red.
+- **Response band.** Sage-tinted block on light, bone surface with a 3px sage left rule on dark. Serif body @ 64ch max-width.
+- **Dispatch fan preserved.** Sub-agent fork → lanes → merge still uses `renderDispatchGroup` — now sits under a `Plan & dispatch` phase anchor instead of the old "during this turn" button header.
 
-### Changed
-- `renderMultiSession` no longer builds a left sidebar; the active session's turns render directly into `#timeline`.
-- `paintSessionMenu()` is called every render with the *unfiltered* session list — the dropdown stays accessible even when filters narrow to one session.
-- Old `.app-header` / `.filter-strip` markup removed from `index.html`. Dormant CSS for those selectors kept one release for safety.
+### Fixed
+- Duplicate `const selected` in `renderMultiSession` (v2.5.0 regression) — the whole `_timeline.js` failed to parse, so the topbar dropdown never wired up. Renamed to `activeSel`.
 
 ### Note
-- Step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer; step 3 the full-bleed reading-feed layout. Prototype at `docs/design/index.html` is the reference.
+- Step 3 (full-bleed reading-feed layout — scroll-snap, edge-to-edge spacing) still pending.
 
 ## [2.4.0] – 2026-05-13
 

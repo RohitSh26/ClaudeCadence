@@ -1880,115 +1880,194 @@
     return wrap;
   }
 
+  // ── tool → phase label mapping (v2.5 editorial) ──────────────────────
+  const TOOL_PHASE_LABEL = {
+    read:   'Read & locate',
+    search: 'Search',
+    edit:   'Edit & write',
+    bash:   'Verify & run',
+    web:    'Web',
+    think:  'Sub-agent dispatch',
+    task:   'Background tasks',
+    fail:   'Failures',
+    other:  'Other',
+  };
+
+  // v2.5 step 2 — editorial renderTurn. No card chrome. Flat <li class="turn">
+  // with a meta strip, a typographic prompt hero, numbered phase anchors per
+  // tool family, ledger/rollup bodies, and a tinted response band. Preserves
+  // dispatch-fan rendering (renderDispatchGroup) for sub-agent dispatches.
   function renderTurn(turn) {
     const li = el('li','turn');
     if (turn.prompt) {
       li.dataset.id = turn.prompt.id;
       li.id = turn.prompt.id;
     }
-    // Rail with the trunk dot anchored on the prompt.
-    const rail = el('div','rail');
-    const marker = el('div','marker is-filled');
-    if (turn.prompt && turn.prompt.agent === 'founder') {
-      marker.style.setProperty('--lane', 'var(--apricot-600)');
-    }
-    rail.appendChild(marker);
-    li.appendChild(rail);
 
-    // Outer card representing the turn.
-    const card = document.createElement('details');
-    card.className = 'card turn-card';
-    card.dataset.status = (turn.prompt ? turn.prompt.status : (turn.children[0] && turn.children[0].status) || 'completed');
-    // Default open if it's the latest turn (no response = in progress).
-    if (!turn.response) card.open = true;
-    // v2.0: also auto-open turns that contain paired fork+merge dispatch
-    // groups, so the iter6 dispatch-group visual is immediately visible.
     const turnDispatchClusters = collectDispatchGroups(turn.children || []);
     const turnLaneCount = turnDispatchClusters.reduce((s, c) => s + c.lanes.length, 0);
     if (turnDispatchClusters.length) {
-      card.open = true;
-      card.classList.add('has-dispatch');
+      li.classList.add('has-dispatch');
       li.dataset.dispatchClusters = turnDispatchClusters.length;
       li.dataset.dispatchLanes = turnLaneCount;
     }
 
-    const sum = document.createElement('summary');
-    sum.appendChild(el('span','lane-mark'));
+    // ─── 1. meta strip ──────────────────────────────────────────────
+    const hasFailed = (turn.children || []).some(c => c.status === 'failed');
+    const respFailed = turn.response && turn.response.status === 'failed';
+    const statusClass = respFailed || hasFailed ? 'failed'
+                      : turn.response ? 'replied'
+                      : (turn.children && turn.children.length ? 'working' : 'replied');
+    const statusLabel = respFailed ? 'failed' : statusClass === 'working' ? 'working…' : statusClass;
+    const events = (turn.prompt ? 1 : 0) + (turn.children ? turn.children.length : 0) + (turn.response ? 1 : 0);
+    const meta = el('div','turn-meta');
+    let metaHtml = `<span><span class="status-pip ${statusClass}"></span><span class="v">${escapeHtml(statusLabel)}</span></span>`;
+    if (turn.ts) metaHtml += `<span><span class="k">at</span> <span class="v">${escapeHtml(shortTime(turn.ts))} · ${escapeHtml(rel(turn.ts))}</span></span>`;
+    metaHtml += `<span><span class="k">events</span> <span class="v">${events}</span></span>`;
+    if (turn.id) metaHtml += `<span><span class="k">turn</span> <span class="v">${escapeHtml(turn.id.slice(0, 14))}</span></span>`;
+    meta.innerHTML = metaHtml;
+    li.appendChild(meta);
 
+    // ─── 2. prompt hero ─────────────────────────────────────────────
     if (turn.prompt) {
-      const pillEl = el('span','agent-pill');
-      pillEl.style.setProperty('--lane', laneVar('founder'));
-      pillEl.appendChild(el('span','swatch'));
-      pillEl.appendChild(document.createTextNode(' you'));
-      sum.appendChild(pillEl);
-
-      const titleEl = el('h3','title');
-      titleEl.textContent = turn.prompt.title || '(empty prompt)';
-      sum.appendChild(titleEl);
+      const hero = el('section','prompt-hero');
+      const isDecision = (turn.prompt.tags || []).indexOf('slash') !== -1 || turn.prompt.kind === 'decision';
+      if (isDecision) hero.classList.add('decision');
+      const promptTitle = turn.prompt.title || '(empty prompt)';
+      const hasLede = turn.prompt.summary && turn.prompt.summary !== turn.prompt.title;
+      let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span></div>`;
+      heroHtml += `<h1>${escapeHtml(promptTitle)}</h1>`;
+      if (hasLede) heroHtml += `<p class="lede">${escapeHtml(turn.prompt.summary)}</p>`;
+      hero.innerHTML = heroHtml;
+      li.appendChild(hero);
     } else {
-      const titleEl = el('h3','title');
-      titleEl.textContent = '(session events)';
-      titleEl.style.color = 'var(--mid)';
-      titleEl.style.fontStyle = 'italic';
-      sum.appendChild(titleEl);
+      const orphan = el('section','prompt-hero');
+      orphan.innerHTML = `<div class="eyebrow">session events</div><h1 style="font-style:italic;color:var(--mid);">(no prompt — system activity)</h1>`;
+      li.appendChild(orphan);
     }
 
-    const tag = el('span','status-tag');
-    tag.appendChild(el('span','dot'));
-    tag.appendChild(document.createTextNode(turn.response ? 'replied' : (turn.children.length ? 'working…' : 'open')));
-    sum.appendChild(tag);
-
-    const tm = el('span','time');
-    tm.innerHTML = `<time>${escapeHtml(shortTime(turn.ts))}</time> <span class="rel">· ${escapeHtml(rel(turn.ts))}</span>`;
-    sum.appendChild(tm);
-
-    const chev = el('span','chevron');
-    chev.innerHTML = chevronSvg();
-    sum.appendChild(chev);
-    card.appendChild(sum);
-
-    // Activity strip — shown ALWAYS so collapsed cards still tell the story.
-    if (turn.children.length || turn.response) {
-      const strip = el('div','turn-strip');
-      const activity = turnSummary(turn);
-      const respPreview = turn.response ? `<span class="resp-preview">↪ ${escapeHtml(turn.response.summary || turn.response.title || '')}</span>` : '';
-      // v2.0: dispatch-group count badge if this turn contains any.
-      let dispatchBadge = '';
-      if (turnDispatchClusters.length) {
-        const names = [...new Set(turnDispatchClusters.flatMap(c => c.lanes.map(l => l.subagentName)))].slice(0, 3).join(', ');
-        const noun = turnLaneCount === 1 ? 'dispatch' : 'dispatches';
-        dispatchBadge =
-          '<span class="dispatch-badge" title="paired fork+merge dispatch groups">' +
-          '🔀 ' + turnLaneCount + ' subagent ' + noun +
-          (names ? ' · ' + escapeHtml(names) : '') +
-          '</span>';
+    // ─── 3. dispatch clusters (sub-agent fan visualization) ─────────
+    const usedInDispatch = new Set();
+    for (const c of turnDispatchClusters) {
+      for (const lane of c.lanes) {
+        if (lane.fork)  usedInDispatch.add(lane.fork.id);
+        for (const m of lane.merges) usedInDispatch.add(m.id);
       }
-      strip.innerHTML = dispatchBadge + (dispatchBadge && (activity || respPreview) ? ' · ' : '') +
-                       (activity || '') + (activity && respPreview ? ' · ' : '') + respPreview;
-      sum.parentNode.insertBefore(strip, sum.nextSibling);
+    }
+    if (turnDispatchClusters.length) {
+      const phase = el('div','phase');
+      phase.innerHTML = `
+        <span class="n">${(turnDispatchClusters.length === 1 ? '01' : '01')} ·</span>
+        <h2>Plan &amp; dispatch</h2>
+        <span class="stat"><span class="num">${turnLaneCount}</span> sub-agent lane${turnLaneCount === 1 ? '' : 's'}</span>`;
+      li.appendChild(phase);
+      turnDispatchClusters.forEach(c => li.appendChild(renderDispatchGroup(c)));
     }
 
-    // Body — only when expanded.
-    // v1.8: `constrained` caps prose blocks at --prose-width (72ch) for
-    // readability; tables / code / charts still go full-bleed.
-    const body = el('div','body turn-body constrained');
-
-    // 1. Full prompt body
-    if (turn.prompt && turn.prompt.blocks && turn.prompt.blocks.length) {
-      const promptSection = el('div','turn-section');
-      promptSection.appendChild(el('div','section-label','prompt'));
-      const inner = el('div','blocks');
-      turn.prompt.blocks.forEach(b => {
-        const r = renderers[b.type];
-        if (r) inner.appendChild(r(b));
+    // ─── 4. tool-family phases (Read / Edit / Verify / …) ───────────
+    if (turn.children && turn.children.length) {
+      const buckets = new Map();
+      turn.children.forEach(c => {
+        if (usedInDispatch.has(c.id)) return;
+        const tool = classifyChild(c);
+        if (!buckets.has(tool)) buckets.set(tool, []);
+        buckets.get(tool).push(c);
       });
-      promptSection.appendChild(inner);
-      body.appendChild(promptSection);
+
+      let phaseNum = turnDispatchClusters.length ? 2 : 1;
+      TOOL_ORDER.forEach(tool => {
+        const items = buckets.get(tool);
+        if (!items || !items.length) return;
+        const lastTs = items[items.length - 1]?.ts;
+
+        // Aggregate stats (lines for edits, count + last for everything else)
+        let added = 0, removed = 0;
+        items.forEach(c => { added += (c.lines_added || 0); removed += (c.lines_removed || 0); });
+
+        const phase = el('div','phase');
+        let statHtml = `<span class="num">${items.length}</span> ${escapeHtml(TOOL_LABELS[tool] || tool)}`;
+        if (tool === 'edit' && (added || removed)) {
+          statHtml += ` · ${added ? `<span class="add">+${added}</span>` : ''}${added && removed ? ' ' : ''}${removed ? `<span class="del">−${removed}</span>` : ''}`;
+        }
+        if (lastTs) statHtml += ` · <span class="num">${escapeHtml(shortTime(lastTs))}</span>`;
+        phase.innerHTML = `
+          <span class="n">${String(phaseNum).padStart(2, '0')} ·</span>
+          <h2>${escapeHtml(TOOL_PHASE_LABEL[tool] || (TOOL_LABELS[tool] || tool))}</h2>
+          <span class="stat">${statHtml}</span>`;
+        li.appendChild(phase);
+        phaseNum++;
+
+        // Body: rollup table for edits, ledger list otherwise.
+        if (tool === 'edit') {
+          const tbl = document.createElement('table');
+          tbl.className = 'rollup';
+          let html = '<thead><tr><th>file</th><th>change</th><th>at</th></tr></thead><tbody>';
+          items.forEach(c => {
+            const file = escapeHtml(c.file_path || c.title || childTargetText(c));
+            const a = c.lines_added ? `<span class="add">+${c.lines_added}</span>` : '';
+            const d = c.lines_removed ? `<span class="del">−${c.lines_removed}</span>` : '';
+            html += `<tr><td class="path">${file}</td><td class="delta">${a}${a && d ? ' ' : ''}${d}</td><td class="t">${escapeHtml(shortTime(c.ts))}</td></tr>`;
+          });
+          html += '</tbody></table>';
+          tbl.outerHTML; // no-op for lint
+          const wrap = document.createElement('div');
+          wrap.innerHTML = html;
+          li.appendChild(wrap.firstChild);
+        } else {
+          const ul = document.createElement('ul');
+          ul.className = 'ledger';
+          items.forEach(c => {
+            const liR = document.createElement('li');
+            const target = childTargetText(c) || '(no target)';
+            // task_group rows reuse the existing childRow for the expand UX
+            if (c.kind === 'task_group' && Array.isArray(c.blocks) && c.blocks.length) {
+              liR.innerHTML = ''; // built by childRow
+              const row = childRow(c);
+              liR.appendChild(row);
+              liR.style.display = 'block'; liR.style.gridTemplateColumns = 'none';
+            } else {
+              liR.innerHTML =
+                `<span class="t">${escapeHtml(shortTime(c.ts))}</span>` +
+                `<span class="what">${escapeHtml(target)}</span>` +
+                `<span class="tag" data-kind="${tool}">${escapeHtml(TOOL_LABELS[tool] || tool)}${c.status === 'failed' ? ' · fail' : ''}</span>`;
+              if (c.status === 'failed') liR.querySelector('.tag').classList.add('fail');
+            }
+            ul.appendChild(liR);
+          });
+          li.appendChild(ul);
+        }
+      });
     }
 
-    // 2. v1.8 — children grouped by tool family (read/edit/bash/web/think/fail).
-    //    Each group is collapsed by default; click expands. First 5 rows visible,
-    //    "show all N" reveals the rest.
+    // ─── 5. response band (sage-tinted) ─────────────────────────────
+    if (turn.response) {
+      const resp = el('section','response');
+      if (respFailed) resp.classList.add('is-failed');
+      const eyebrowLabel = respFailed ? 'refused' : 'response';
+      let html = `<div class="eyebrow">${eyebrowLabel} <span class="who">— Claude</span></div>`;
+      if (turn.response.blocks && turn.response.blocks.length) {
+        const dom = document.createElement('div');
+        turn.response.blocks.forEach(b => {
+          const r = renderers[b.type];
+          if (r) dom.appendChild(r(b));
+        });
+        // Promote first markdown block's H1/H2 to the response H3 if present.
+        html += dom.innerHTML;
+      } else {
+        html += `<h3>${escapeHtml(turn.response.title || 'Claude responded')}</h3>`;
+        if (turn.response.summary) html += `<p>${escapeHtml(turn.response.summary)}</p>`;
+      }
+      resp.innerHTML = html;
+      li.appendChild(resp);
+    }
+
+    return li;
+  }
+
+  // ── legacy renderTurn body kept below for reference, unreachable ──
+  /* eslint-disable */
+  function _legacyRenderTurn(turn) {
+    // (legacy v2.4 body intentionally retained but no longer called)
     if (turn.children.length) {
       const turnKey = (turn.id || turn.prompt?.id || (turn.children[0] && turn.children[0].id) || 'orphan');
       const childSection = el('div','turn-section');
