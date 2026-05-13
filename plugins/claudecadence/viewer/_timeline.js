@@ -1435,6 +1435,7 @@
   function classifyChild(c) {
     if (c.status === 'failed') return 'fail';
     const tags = c.tags || [];
+    if (c.kind === 'task_group' || tags.indexOf('task') !== -1)     return 'task';
     if (tags.indexOf('read') !== -1)                                return 'read';
     if (tags.indexOf('wrote') !== -1 || tags.indexOf('edited') !== -1) return 'edit';
     if (tags.indexOf('bash') !== -1)                                return 'bash';
@@ -1448,10 +1449,11 @@
     bash:  'bash',
     web:   'web',
     think: 'subagent',
+    task:  'background task',
     fail:  'failed',
     other: 'other',
   };
-  const TOOL_ORDER = ['read', 'edit', 'bash', 'web', 'think', 'fail', 'other'];
+  const TOOL_ORDER = ['read', 'edit', 'bash', 'web', 'think', 'task', 'fail', 'other'];
 
   function childTargetText(c) {
     // Pick the most useful one-line target string for the row.
@@ -1475,10 +1477,22 @@
     const row = hasBlocks ? document.createElement('summary') : root;
     if (hasBlocks) row.className = 'child-row-summary';
 
-    const ts  = el('span','ts');     ts.textContent  = shortTime(c.ts);
+    // v2.4: task_group rows show the LAST update time (the row's "now"),
+    // not the first capture. Everything else uses c.ts.
+    const rowTs = (c.kind === 'task_group' && c.last_ts) ? c.last_ts : c.ts;
+    const ts  = el('span','ts');     ts.textContent  = shortTime(rowTs);
     const tg  = el('span','target'); tg.textContent  = childTargetText(c);
     const me  = el('span','meta');
     if (c.status === 'failed') me.classList.add('fail');
+
+    // v2.4: task-group count badge — "N updates" pill, click row to expand
+    // and see the individual notifications stored in c.blocks.
+    if (c.kind === 'task_group' && (c.task_count || 0) > 0) {
+      const badge = el('span','task-count');
+      badge.textContent = c.task_count + (c.task_count === 1 ? ' update' : ' updates');
+      badge.title = 'background-task notifications grouped by task-id';
+      row.appendChild(badge);
+    }
 
     // File-edit diff badge — visible inline when the hook captured deltas.
     if (typeof c.lines_added === 'number' || typeof c.lines_removed === 'number') {

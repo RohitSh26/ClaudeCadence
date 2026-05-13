@@ -2,6 +2,15 @@
 
 All notable changes to ClaudeCadence are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org).
 
+## [2.4.0] – 2026-05-13
+
+### Added
+- **Task-notification grouping** — long-running background tasks (`Bash` with `run_in_background`, scheduled / Auto-Mode work) emit a `<task-notification>` every ~2 minutes. Each one fires `UserPromptSubmit`, which the v2.3 hook captured as a fresh prompt, opening a fresh turn. A 10-minute task could produce 50+ noisy "prompt" rows. v2.4 collapses them: a new `task_group` node is upserted once per `task-id` within the current open turn, count + latest status are folded into one row, and the individual updates are stored as expandable blocks. Click the row to see the timeline of notifications.
+- **Editorial design prototype** at `docs/design/index.html` — the full v2.4 visual language locked in a static page. Used as the visual reference for porting into the live viewer.
+
+### Fixed
+- **System-injection guard on `UserPromptSubmit`** — `<task-notification>`, `<<autonomous-loop-…>`, `<command-name>`, and the rest of the harness-injected pseudo-prompts no longer create timeline nodes. Previously this was only filtered in `deriveCatchUpNodes`; the UPS handler captured everything UPS emitted.
+
 ## [2.3.2] – 2026-05-12
 
 ### Fixed

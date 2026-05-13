@@ -434,6 +434,99 @@ function buildHunkDiff(filePath, oldText, newText, maxLines) {
   return head.concat(body).join('\n');
 }
 
+// ─── System-injection guards + task-notification grouping (v2.4) ──────
+// UserPromptSubmit fires for harness-injected pseudo-prompts in Auto Mode
+// and scheduled work: task-notifications every ~2 min from background bash,
+// autonomous-loop sentinels, command-* harness wrappers. Without a guard a
+// 10-minute background task can spawn 50+ "prompt" rows. We:
+//   1. drop autonomous-loop / command-* injections silently
+//   2. fold N task-notifications into ONE task_group node per task-id per
+//      turn, bumping count + appending latest status on each fire.
+
+const TASK_NOTIFICATION_HEAD_RE = /^<+task-notification/;
+
+function isSystemInjectionText(text) {
+  return SYSTEM_INJECTION_RE.test(String(text || '').trimStart());
+}
+
+function extractTaskId(text) {
+  const m = String(text || '').match(/<task-id>\s*([^<\s]+)\s*<\/task-id>/);
+  return m ? m[1] : null;
+}
+
+// Lift a short status hint from the notification: <status>X</status> if
+// present, else the first non-tag line of the content. Falls back to a
+// fixed string so the renderer always has something readable.
+function extractTaskNotice(text) {
+  const t = String(text || '');
+  const statusM = t.match(/<status>\s*([^<]+?)\s*<\/status>/);
+  const summaryM = t.match(/<summary>\s*([\s\S]+?)\s*<\/summary>/);
+  const cleaned = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const firstLine = cleaned.split('\n')[0].trim();
+  return {
+    status:  (statusM && statusM[1].trim()) || firstLine || 'update',
+    summary: (summaryM && summaryM[1].trim()) || cleaned.slice(0, 240),
+  };
+}
+
+// Find OR create a task_group node for (session, turnId, taskId). On hit,
+// increment count, refresh status/last_ts, append the new notice to blocks
+// (capped at ~200 entries to keep nodes.js manageable on truly hairy runs).
+// Performs its own load/save under the cross-hook lock and returns true if
+// it touched nodes.js, false if the upsert was skipped (no open turn).
+function upsertTaskGroup(session, turnId, taskId, notice) {
+  if (!turnId || !taskId) return false;
+  withNodesLock(() => {
+    const nodes = loadNodes();
+    let existing = null;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      if ((n.kind || '') !== 'task_group') continue;
+      if ((n.session || 'main') !== session) continue;
+      if ((n.turn_id || null) !== turnId) continue;
+      if ((n.task_id || null) !== taskId) continue;
+      existing = n;
+      break;
+    }
+    const ts = nowIso();
+    if (existing) {
+      existing.task_count = (existing.task_count || 1) + 1;
+      existing.title   = `Task ${taskId.slice(-8)} · ${existing.task_count} updates`;
+      existing.summary = shortStr(notice.status || existing.summary, 160);
+      existing.last_ts = ts;
+      if (!Array.isArray(existing.blocks)) existing.blocks = [];
+      existing.blocks.push({ type: 'markdown', value: `**${ts.slice(11, 19)}** · ${notice.status}` });
+      if (existing.blocks.length > 200) {
+        const dropped = existing.blocks.length - 200;
+        existing.blocks = [{ type: 'markdown', value: `… ${dropped} earlier updates collapsed` }].concat(existing.blocks.slice(-200));
+      }
+    } else {
+      const seq = nodes.length + 1;
+      const newNode = {
+        id: newId(seq, ts),
+        agent: 'orchestrator',
+        kind: 'task_group',
+        status: 'in_progress',
+        title: `Task ${taskId.slice(-8)} · 1 update`,
+        summary: shortStr(notice.status || 'task update', 160),
+        tags: ['task', 'group'],
+        session,
+        turn_id: turnId,
+        task_id: taskId,
+        task_count: 1,
+        first_ts: ts,
+        last_ts: ts,
+        ts,
+        parents: nodes.length ? [nodes[nodes.length - 1].id] : [],
+        blocks: [{ type: 'markdown', value: `**${ts.slice(11, 19)}** · ${notice.status}` }],
+      };
+      nodes.push(newNode);
+    }
+    saveNodes(nodes);
+  });
+  return true;
+}
+
 // ─────────────────────────── Event handlers ──────────────────────────────
 
 function handleSessionStart(payload, ctx) {
@@ -457,6 +550,25 @@ function handleUserPrompt(payload) {
   const prompt = (payload.prompt || '').trim();
   if (!prompt) return null;
   const session = sessionIdOf(payload);
+
+  // v2.4 — system-injection guard. UPS also fires for harness-injected
+  // pseudo prompts (task-notification, autonomous-loop sentinels, command-*
+  // markers) in Auto Mode and scheduled work. Without this guard a long
+  // background task spawns 50+ "prompt" rows (one per ~2-min notification).
+  // task-notifications get folded into a single task_group per task-id in
+  // the CURRENTLY-open turn; everything else is dropped.
+  if (isSystemInjectionText(prompt)) {
+    if (TASK_NOTIFICATION_HEAD_RE.test(prompt)) {
+      const taskId = extractTaskId(prompt);
+      const openTid = currentTurnId();
+      if (openTid && taskId) {
+        try { upsertTaskGroup(session, openTid, taskId, extractTaskNotice(prompt)); }
+        catch (exc) { logErr(`task-group upsert failed: ${exc && exc.message || exc}`); }
+      }
+    }
+    return null;
+  }
+
   const tid = beginTurn();
   // Push this turn onto the per-session FIFO with the current "lower bound"
   // (latest assistant ts in transcript right now). Stop will pop it later

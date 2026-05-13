@@ -3942,3 +3942,24 @@ details.code-collapsible > pre { margin: 0; }
   font-size: 11.5px;
 }
 /* Existing fork/merge tints applied via .child-row also work here. */
+
+/* ────────────────────────────────────────────────────────────────────────
+   v2.4 — task-group child row. Background-task notifications grouped by
+   task-id show as ONE row with a count pill instead of N noisy entries.
+   ──────────────────────────────────────────────────────────────────────── */
+.child-row .task-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--info) 22%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+[data-theme="dark"] .child-row .task-count {
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 18%, var(--bone));
+  border-color: color-mix(in oklab, var(--info) 28%, transparent);
+}
