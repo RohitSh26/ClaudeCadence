@@ -18,6 +18,15 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.5.4] – 2026-05-13
+
+### Added
+- **Expandable rollup rows.** Each Edit/Write row in the rollup now renders as a `<details>` element; clicking opens the captured diff inline (syntax-highlighted via the existing code-block renderer). Rows for nodes without diffs stay flat. Replaces the static `<table>` rollup.
+- **`📎 image attached` chip** in the prompt-hero. The harness leaves literal `[Image #N]` placeholders in `payload.prompt` when the user attaches a screenshot/photo. v2.5.4 strips the placeholder from the h1/lede and surfaces a small apricot chip in the eyebrow row so the user knows one was sent. (Embedding the actual image bytes requires reading the transcript — backlog.)
+
+### Changed
+- **Wider response prose.** Reading-column on `.response p / ul / ol / h3` bumped 64ch → 80ch. Was leaving too much empty sage band on wide laptops; 80ch still respects the 60-80 char editorial sweet spot.
+
 ## [2.5.3] – 2026-05-13
 
 ### Added — feature parity with the design prototype (port step 3)

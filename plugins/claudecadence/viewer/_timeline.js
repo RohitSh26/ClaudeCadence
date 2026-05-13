@@ -1893,31 +1893,36 @@
   }
 
   // Split a long prompt into an h1 "first sentence" + lede "rest". Hard-cut
-  // at 200 chars so a paragraph-long opening line doesn't become a banner.
-  // Returns { h1, lede } — both already escaped for safe HTML insertion.
+  // at 220 chars so a paragraph-long opening line doesn't become a banner.
+  // Also strips harness-injected image placeholders ("[Image #3]") from the
+  // hero text and counts how many were present so the caller can surface
+  // a "📎 image attached" indicator separately. v2.5.4.
   function splitPromptForHero(prompt) {
-    const raw = ((prompt.blocks && prompt.blocks[0] && prompt.blocks[0].value) || prompt.title || '').trim();
-    if (!raw) return { h1: '(empty prompt)', lede: '' };
-    // First sentence boundary if it ends with . ! ? followed by whitespace.
+    let raw = ((prompt.blocks && prompt.blocks[0] && prompt.blocks[0].value) || prompt.title || '').trim();
+    // Strip image placeholders so they don't show as literal text in the
+    // editorial h1. The image bytes themselves live in the transcript as
+    // base64 message blocks; extracting them is a separate, larger change.
+    const imageMarkerRe = /\[Image\s*(?:#\d+|attached)?\]/gi;
+    const imageMatches = raw.match(imageMarkerRe) || [];
+    if (imageMatches.length) {
+      raw = raw.replace(imageMarkerRe, '').replace(/\s{2,}/g, ' ').trim();
+    }
+    if (!raw) {
+      return { h1: imageMatches.length ? '(image attached)' : '(empty prompt)', lede: '', attachments: imageMatches.length };
+    }
     const m = raw.match(/^([^\n]+?[.!?])\s+([\s\S]+)$/);
     let h1, lede;
-    if (m && m[1].length <= 220) {
-      h1 = m[1];
-      lede = m[2];
-    } else {
-      h1 = raw;
-      lede = '';
-    }
+    if (m && m[1].length <= 220) { h1 = m[1]; lede = m[2]; }
+    else { h1 = raw; lede = ''; }
     if (h1.length > 220) {
       const cut = h1.lastIndexOf(' ', 220);
       h1 = h1.slice(0, cut > 0 ? cut : 220) + '…';
     }
-    // Cap lede so it doesn't dominate the page when the prompt is huge.
     if (lede.length > 400) {
       const cut = lede.lastIndexOf(' ', 400);
       lede = lede.slice(0, cut > 0 ? cut : 400) + '…';
     }
-    return { h1: escapeHtml(h1), lede: escapeHtml(lede) };
+    return { h1: escapeHtml(h1), lede: escapeHtml(lede), attachments: imageMatches.length };
   }
 
   const TOOL_PHASE_LABEL = {
@@ -1973,10 +1978,15 @@
       const isDecision = (turn.prompt.tags || []).indexOf('slash') !== -1 || turn.prompt.kind === 'decision';
       if (isDecision) hero.classList.add('decision');
       // v2.5.2: sentence-aware split so the h1 doesn't truncate mid-word
-      // and the lede gets the rest of the first paragraph. Falls back to
-      // title-only for empty or single-sentence prompts.
-      const { h1, lede } = splitPromptForHero(turn.prompt);
-      let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span></div>`;
+      // and the lede gets the rest of the first paragraph. v2.5.4: strips
+      // harness "[Image #N]" markers and surfaces a small attachment chip.
+      const { h1, lede, attachments } = splitPromptForHero(turn.prompt);
+      let heroHtml = `<div class="eyebrow">${isDecision ? 'decision' : 'prompt'} <span class="who">— you, ${escapeHtml(rel(turn.ts))} ago</span>`;
+      if (attachments) {
+        const noun = attachments === 1 ? 'image' : `${attachments} images`;
+        heroHtml += ` <span class="hero-attachment" title="The hook captures only prompt text; image bytes live in the transcript">📎 ${noun} attached</span>`;
+      }
+      heroHtml += `</div>`;
       heroHtml += `<h1>${h1}</h1>`;
       if (lede) heroHtml += `<p class="lede">${lede}</p>`;
       hero.innerHTML = heroHtml;
@@ -2038,26 +2048,46 @@
         li.appendChild(phase);
         phaseNum++;
 
-        // Body: rollup table for edits, ledger list otherwise.
+        // Body: edit phase uses an expandable rollup (each row is a
+        // <details> revealing the captured diff inline); other tools get
+        // a flat ledger.
         if (tool === 'edit') {
-          // v2.5.2 — set innerHTML on the <table> directly. The previous
-          // version wrote `<thead>...<tbody>...</tbody></table>` into a
-          // <div> wrapper; browsers strip orphan <thead>/<tbody> tags when
-          // they aren't inside a <table>, leaving the cell text concatenated
-          // on one line. That one giant unbreakable URL forced the page
-          // wider than the viewport and made every other row look broken.
-          const tbl = document.createElement('table');
-          tbl.className = 'rollup';
-          let html = '<thead><tr><th>file</th><th>change</th><th>at</th></tr></thead><tbody>';
+          // v2.5.4 — replace the static <table> rollup with a grid of
+          // <details> rows. Each row's summary mimics a table cell layout
+          // (file · change · at); clicking reveals the diff block captured
+          // on the node since v2.3 (lang: 'diff', syntax-highlighted by
+          // the existing renderers['code']).
+          const head = document.createElement('div');
+          head.className = 'rollup-head';
+          head.innerHTML = '<span class="caret-spacer"></span><span>FILE</span><span>CHANGE</span><span>AT</span>';
+          li.appendChild(head);
           items.forEach(c => {
+            const det = document.createElement('details');
+            det.className = 'rollup-row';
             const file = escapeHtml(extractFilePathFromChild(c));
             const a = c.lines_added ? `<span class="add">+${c.lines_added}</span>` : '';
             const d = c.lines_removed ? `<span class="del">−${c.lines_removed}</span>` : '';
-            html += `<tr><td class="path">${file}</td><td class="delta">${a}${a && d ? ' ' : ''}${d}</td><td class="t">${escapeHtml(shortTime(c.ts))}</td></tr>`;
+            const hasBlocks = Array.isArray(c.blocks) && c.blocks.length > 0;
+            const sum = document.createElement('summary');
+            sum.innerHTML =
+              `<span class="caret">${hasBlocks ? '▸' : '·'}</span>` +
+              `<span class="path">${file}</span>` +
+              `<span class="delta">${a}${a && d ? ' ' : ''}${d}</span>` +
+              `<span class="t">${escapeHtml(shortTime(c.ts))}</span>`;
+            det.appendChild(sum);
+            if (hasBlocks) {
+              const body = document.createElement('div');
+              body.className = 'rollup-row-body';
+              c.blocks.forEach(b => {
+                const r = renderers[b.type];
+                if (r) body.appendChild(r(b));
+              });
+              det.appendChild(body);
+            } else {
+              det.classList.add('no-blocks');
+            }
+            li.appendChild(det);
           });
-          html += '</tbody>';
-          tbl.innerHTML = html;
-          li.appendChild(tbl);
         } else {
           const ul = document.createElement('ul');
           ul.className = 'ledger';

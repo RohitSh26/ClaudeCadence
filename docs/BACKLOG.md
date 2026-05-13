@@ -34,6 +34,15 @@ Things parked for after the next release.
 
 ## Next up
 
+### Embed real images in the prompt-hero
+Today the hook captures `payload.prompt` (text only). When the user attaches an image, the harness leaves a literal `[Image #N]` placeholder in the prompt text where the bytes were inlined in the chat input. v2.5.4 strips the placeholder and shows a small `📎 image attached` chip in the prompt-hero so the user knows one was sent.
+
+Real fix: during `handleUserPrompt`, read `payload.transcript_path`, find the corresponding user-message entry (most recent unconsumed user role with this prompt's content), extract any `image` content blocks (base64 + mime), and attach them to the captured prompt node as `image` blocks. Renderer then shows them inline below the h1.
+
+Touchpoints: `cadence_hook.js :: handleUserPrompt`; new helper `extractImageBlocksFromTranscript`; `_timeline.js` renderers map already supports custom block types. Estimate ~2 hours.
+
+
+
 ### Group task-notification entries per long-running task
 Long-running tasks (background scripts, agents that run for tens of minutes) emit `<task-notification>` updates every ~2 minutes. Today each one lands as its own row — a 10-minute task can produce 50+ near-identical timeline entries that visually drown the prompt and response.
 

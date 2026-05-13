@@ -4772,3 +4772,104 @@ li.turn table.rollup td.path .dim { color: var(--neutral-400); }
   vertical-align: middle;
   margin-right: 6px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v2.5.4 — rollup row expansion + wider response prose
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── rollup header + expandable rows ──────────────────────────────── */
+li.turn > .rollup-head,
+li.turn > .rollup-row > summary {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 12px;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  align-items: baseline;
+}
+li.turn > .rollup-head {
+  border-bottom: 1px solid var(--neutral-300);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--neutral-400);
+  padding-bottom: 8px;
+}
+li.turn > .rollup-row {
+  border-bottom: 1px dotted var(--soft);
+}
+li.turn > .rollup-row:last-of-type { border-bottom: none; }
+li.turn > .rollup-row > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+  transition: background 100ms ease;
+}
+li.turn > .rollup-row > summary::-webkit-details-marker { display: none; }
+li.turn > .rollup-row > summary:hover { background: color-mix(in oklab, var(--bone) 60%, transparent); }
+li.turn > .rollup-row > summary .caret {
+  color: var(--mid);
+  font-size: 10px;
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  transition: transform 120ms ease;
+}
+li.turn > .rollup-row[open] > summary .caret { transform: rotate(90deg); }
+li.turn > .rollup-row > summary .path {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+li.turn > .rollup-row > summary .delta .add { color: var(--success); }
+li.turn > .rollup-row > summary .delta .del { color: var(--danger); }
+li.turn > .rollup-row > summary .t { color: var(--mid); font-feature-settings: 'tnum'; }
+li.turn > .rollup-row.no-blocks > summary { cursor: default; }
+li.turn > .rollup-row.no-blocks > summary:hover { background: transparent; }
+li.turn > .rollup-row > .rollup-row-body {
+  padding: 4px 12px 14px 26px;
+  border-left: 2px solid var(--soft);
+  margin: 4px 0 8px 6px;
+}
+li.turn > .rollup-row > .rollup-row-body > .block {
+  margin: 0 0 8px 0;
+}
+[data-theme="dark"] li.turn > .rollup-row > summary:hover {
+  background: color-mix(in oklab, var(--apricot-500) 5%, var(--bone));
+}
+
+/* ── response prose: wider reading column (was 64ch — too narrow on
+       wide laptops; left the right of the sage band looking empty). 80ch
+       still respects editorial line-length guidance (60-80 char range). */
+li.turn > .response p,
+li.turn > .response ul,
+li.turn > .response ol,
+li.turn > .response h3 {
+  max-width: 80ch;
+}
+
+/* hero attachment chip — surfaces image attachments stripped from the
+   prompt text (v2.5.4). */
+li.turn > .prompt-hero .hero-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--apricot-500) 30%, transparent);
+  background: color-mix(in oklab, var(--apricot-100) 40%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--apricot-700);
+  font-weight: 500;
+}
+[data-theme="dark"] li.turn > .prompt-hero .hero-attachment {
+  background: color-mix(in oklab, var(--apricot-500) 12%, var(--bone));
+  border-color: color-mix(in oklab, var(--apricot-500) 30%, transparent);
+  color: var(--apricot-600);
+}
