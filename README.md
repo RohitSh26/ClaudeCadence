@@ -28,120 +28,116 @@
   <br><sub><em>Hub · light variant</em></sub>
 </p>
 
-ClaudeCadence is a Claude Code plugin that gives you a **live HTML timeline** of your sessions — every tool call, every sub-agent fork, every PR opened, every decision made — rendered as an expandable, filterable, fork-aware vertical timeline you open in your browser.
+ClaudeCadence is a Claude Code plugin that gives you a **live, readable timeline** of your sessions — every prompt, every tool call, every sub-agent dispatched, every diff, every screenshot you attached — rendered as a typographic feed you open in your browser and watch fill itself.
+
+It is built for engineers who run long multi-agent sessions and want to *see* the structure of the work afterward, not scroll through chat.
 
 > **🔋 Zero extra LLM cost — guaranteed.**
-> ClaudeCadence runs **entirely** on Claude Code's hook system. Hooks are shell scripts that fire on lifecycle events; they never call an LLM. The plugin doesn't send a single extra token to Anthropic, doesn't use your API key, doesn't add anything to your existing Claude Code bill. **No tokens. No subscription. No telemetry. No hosted services.** It only watches what Claude Code is already doing and writes the timeline as a side effect.
-
-You open the viewer in a browser tab, work normally, watch it fill itself.
+> ClaudeCadence runs **entirely** on Claude Code's hook system. Hooks are short Node scripts that fire on lifecycle events; they never call an LLM. The plugin doesn't send a single extra token to Anthropic, doesn't use your API key, doesn't add anything to your existing Claude Code bill. **No tokens. No subscription. No telemetry. No hosted services.** It only watches what Claude Code is already doing and writes the timeline as a side effect.
 
 ```
 $ /plugin marketplace add RohitSh26/ClaudeCadence
 $ /plugin install claudecadence@claudecadence
 ```
 
-That's it. **The viewer auto-starts on the next SessionStart** — no slash command needed. Open `http://localhost:4173/` (or whichever port the plugin printed in the "Session started" node). Now go work in Claude Code. The timeline grows in the background and the browser tab auto-refreshes every 5 seconds.
+That's it. The viewer auto-starts on the next `SessionStart` — no slash command needed. Open `http://localhost:4173/` (or whichever port the plugin printed in the *Session started* row). Work normally; the page polls every 5 seconds and grows itself.
 
-Want it off? Set `CLAUDECADENCE_NO_AUTO_SERVE=1` in your shell. Then start it manually with `/claudecadence:serve` or `cadence-start` from any terminal.
+Set `CLAUDECADENCE_NO_AUTO_SERVE=1` if you'd rather start it by hand with `/claudecadence:serve`.
 
 ---
 
+## What you see
+
+Each turn renders as a **flat, editorial document** — no bordered cards, no "during this turn" buttons.
+
+- A **prompt hero**. Long markdown prompts render in full; the h1 is the first sentence or markdown heading. Command-style prompts (`cd …`, `git pull`, `npm i`) render in mono with an apricot left-rule instead of as a 30-pt serif headline.
+- **Image attachments** you paste into the prompt are extracted from the transcript, persisted to `.claude/cadence/images/`, and embedded inline below the heading as real `<img>` figures.
+- **Phase anchors** group tool calls by family — `01 · Read & locate`, `02 · Edit & write`, `03 · Verify & run`, etc. — with apricot numerals, serif headings, mono stats.
+- A **ledger list** for reads / bash / search / web (timestamp · target · kind-tinted tag).
+- A **rollup table** for edits with `+N −M` deltas. Each row is expandable to reveal the captured unified diff with **syntax highlighting** (Ruby, Python, JS/TS, Go, Rust, Java, Bash, JSON, YAML, SQL, HTML, CSS).
+- A **dispatch fan** for parallel sub-agents — SVG fork-out / fan-in curves in lane colors, click any lane to expand it full-width with siblings collapsing to slim summary bars.
+- A **sage-tinted response band** with the orchestrator's final reply (serif body @ 95ch, code chips, lists, tables). On dark it shifts to an elevated bone surface with a 3 px sage left-rule.
+- A **session pulse** coordinate plot at the bottom of every feed — every event mapped to a wall-clock axis, color-coded by kind.
+
+Above it all, a sticky thin **topbar** holds the brand, the current session dropdown, a `filter` pill that slides a collapsible overlay down (status / agent / time / view / search), and a sun/moon theme toggle.
+
+`/claudecadence:home` opens the cross-project **hub** — every cadence you've started across every project, with a 14-day activity heatmap, status filters (live / stale / inactive), and full-text search.
+
 ## Why this exists
 
-Multi-agent Claude Code sessions are powerful, but the chat-and-terminal log isn't built for them. When three sub-agents fork in parallel, scrolling chat doesn't show what's happening. When a session runs for hours and you scroll back to find "where did the decision happen," the answer is somewhere in a haystack.
+Multi-agent Claude Code sessions are powerful, but chat scroll wasn't built for them. Three sub-agents fork in parallel and the chat goes opaque. A session runs for hours and you scroll back to find *where the decision happened* — the answer is somewhere in a haystack.
 
-ClaudeCadence is the inverse view: a vertical timeline with branching lanes for parallel sub-agents, color-coded by agent, with rich expandable nodes that hold tables, code, decisions, charts. The structure of the work made visible.
-
-## Status
-
-**v1.6 — Node-only, no Python.** The hook handler and local server are now pure Node.js. Since Claude Code itself ships with Node, the plugin runs anywhere Claude Code runs — Windows-native included. Zero npm dependencies; built-ins only. (v1.5 introduced the sidebar + detail-pane multi-session UX, hub auto-prune, *viewer up* live indicator, and per-cadence *forget* button.) Earlier tags (v1.0–v1.3) had install reliability issues — they're marked as pre-release on GitHub. Use **v1.4.0 or later**. Issues + feature requests welcome at [github.com/RohitSh26/ClaudeCadence/issues](https://github.com/RohitSh26/ClaudeCadence/issues).
-
-If anything looks off after install, run **`/claudecadence:doctor`** in Claude Code — it prints a checklist of every component (hooks loaded, viewer files, server, registry, recent activity) and tells you what to fix.
+ClaudeCadence is the inverse view: the structure of the work made visible, after it happened, in a form you can scan in seconds.
 
 ## Install
-
-In any Claude Code session, run:
 
 ```
 /plugin marketplace add RohitSh26/ClaudeCadence
 /plugin install claudecadence@claudecadence
 ```
 
-That's the canonical install — Claude Code clones this repo into its plugin cache and wires the hooks. No npm, no pip, no separate binaries.
+Claude Code clones this repo into its plugin cache and wires the hooks. No npm, no pip, no separate binaries. Use **v2.0 or later** — earlier tags (v1.0–v1.3) had install reliability issues and are marked pre-release on GitHub. The current release is shown in the badge above; the [CHANGELOG](CHANGELOG.md) is authoritative.
+
+If anything looks off after install, run **`/claudecadence:doctor`** — it prints a checklist of every component and tells you what to fix.
 
 ## Use
 
 ```
-/claudecadence:home      # cross-project home page (every cadence, with status)
+/claudecadence:home      # cross-project home page, every cadence with status
 /claudecadence:serve     # this project's full timeline
-/claudecadence:status    # how many nodes recorded so far in this project
+/claudecadence:status    # node count, server state, viewer location
 /claudecadence:stop      # stop the local server
 /claudecadence:doctor    # self-diagnostic if anything looks off
 ```
 
-Default port is **4173**. If something else is already on 4173, the plugin **auto-walks** to the first free port up to 4181 and prints the URL — no config needed.
+Default port is **4173**. If something is already on it, the plugin auto-walks to the first free port up to 4181 and prints the URL — no config needed.
 
-That's it. The hooks handle the rest. **You don't have to remember to log anything** — the timeline just fills itself as you work, and the viewer auto-refreshes every 5 seconds while you watch.
-
-## Two surfaces
-
-### The home (`/claudecadence:home`)
-
-Every Claude Code session you've ever opened with this plugin enabled is registered as a "cadence." The home page lists them all with:
-
-- **Status pill** — *active* (last activity within 5 min) · *stale* (within 24 h) · *inactive* (older).
-- **Last activity** (relative timestamp) and **node count**.
-- **Filter by status**, **search by name or path**.
-- Click any cadence → drops you into that project's full timeline.
-
-Useful when you're juggling multiple projects and want to know which sessions are still hot.
-
-### The per-project timeline (`/claudecadence:serve`)
-
-The full vertical timeline for one project. Each node is a moment in the session: tool calls, decisions, sub-agent forks, PRs, CI events. Compact when collapsed, rich when expanded (with markdown · tables · code · checklists · decisions · charts · key-value blocks). Filter by status / agent, search across titles + summaries, switch between full / summary / compact view modes, expand-all / collapse-all.
-
-The viewer **auto-refreshes every 5 seconds** — no manual reload needed once the tab is open.
+The hooks handle the rest. You don't have to remember to log anything; the timeline fills itself as you work, and the viewer auto-refreshes every 5 seconds while you watch.
 
 ## What gets recorded
 
-| Event | Hook | Node kind |
+| Event | Hook | Result in the timeline |
 |---|---|---|
-| Session starts | `SessionStart` | `ci` |
-| User submits a prompt | `UserPromptSubmit` | `response` |
-| Sub-agent dispatched | `PreToolUse` (Agent / Task) | `fork` |
-| Sub-agent returns | `PostToolUse` (Agent / Task) | `merge` |
-| Bash runs `git` / `gh` | `PostToolUse` (Bash) | `commit` / `pr` / `ci` |
-| Sub-agent's turn ends | `SubagentStop` | `merge` |
-| Session turn ends | `Stop` | `response` |
+| Session starts | `SessionStart` | A *Session started* row + auto-serve of the local viewer |
+| User submits a prompt | `UserPromptSubmit` | Editorial prompt hero. Attached images persisted & embedded. Harness injections (task-notification, autonomous-loop, etc.) filtered out. |
+| Sub-agent dispatched | `PreToolUse` (Agent / Task) | `fork` node with the originating `tool_use_id` for pairing |
+| Sub-agent returns | `PostToolUse` (Agent / Task) | `merge` node paired with its fork; renderer draws the fan visualization |
+| File read / search / glob | `PostToolUse` (Read / Grep / Glob) | A `ledger` row under the next phase anchor |
+| File write / edit | `PostToolUse` (Write / Edit / MultiEdit / NotebookEdit) | A rollup row with `+N −M` deltas. Diff captured on the node, click row to expand inline. |
+| `Bash` command | `PostToolUse` (Bash) | A `bash` ledger row with command + exit summary |
+| `WebFetch` / `WebSearch` | `PostToolUse` | A `web` ledger row |
+| Background-task update | `UserPromptSubmit` (system-injected) | Folded into one `task_group` node per `task-id` per turn — count + latest status + click-to-expand history. **Not** captured as a fresh prompt. |
+| Sub-agent's turn ends | `SubagentStop` | Catch-up node if `PostToolUse` missed; dedup'd against existing merges |
+| Session turn ends | `Stop` | Orchestrator response with full text, paired to the originating prompt's turn |
 
-Other Bash commands, file reads, edits, etc. are intentionally **not** recorded — the bar is "would you care about this in 3 days?"
+Hooks fail soft: any exception writes a stub to stderr and exits 0 so a broken viewer can never block a Claude Code session.
 
 ## Cost
 
 | Item | Cost |
 |---|---|
 | Plugin install | Free |
-| Plugin runtime | **$0.00** — hooks are shell scripts, no LLM call |
-| Optional richer narrative (opt-in) | Pennies on your existing Claude Code bill |
+| Plugin runtime | **$0.00** — hooks are Node scripts, no LLM call |
 | Infrastructure | None — everything is local, static HTML, no servers |
 | Telemetry | None, ever |
 
 ## Where data lives
 
-Per-project (the timeline for one project):
+**Per-project** (the timeline for one project):
 
 ```
 your-project/
 └── .claude/
     └── cadence/
-        ├── index.html          # the viewer (copied from the plugin on first run)
+        ├── index.html          # the viewer (refreshed from the plugin per release)
         ├── _design.css
         ├── _timeline.js
+        ├── images/             # base64 image attachments persisted as .png / .jpg
         └── data/
             └── nodes.js        # this project's timeline data
 ```
 
-Per-user (the cross-project home + registry):
+**Per-user** (the cross-project home + registry):
 
 ```
 ~/.claude/cadence/
@@ -155,17 +151,20 @@ Nothing leaves your machine. The "live" indicator pulse is a CSS animation — t
 
 ## Safety
 
-The whole plugin is under 5,000 lines of code, with no build step and no third-party runtime dependencies. You can read it end-to-end in 20 minutes. [`SECURITY.md`](SECURITY.md) is the full policy; the precise list:
+The whole plugin is around 6,000 lines of code, with no build step and no third-party runtime dependencies. You can read it end-to-end in 20 minutes. [`SECURITY.md`](SECURITY.md) is the full policy; the short list:
 
 **What this plugin does:**
+
 - Reads its hook payload from stdin (JSON, per-event, ephemeral)
-- Reads the active session transcript at `~/.claude/projects/<slug>/<session>.jsonl` (on `Stop` + `SubagentStop` only)
+- Reads the active session transcript at `~/.claude/projects/<slug>/<session>.jsonl` to capture responses and extract image attachments
 - Appends nodes to `<project>/.claude/cadence/data/nodes.js`
+- Writes image bytes (base64-decoded) to `<project>/.claude/cadence/images/<session>-<turn>-<idx>.<ext>` — capped at 5 MB per image, max 5 per turn
 - Writes per-session bookkeeping in `<project>/.claude/cadence/` (queue, cursor, current-turn files)
 - Registers in `~/.claude/cadence/registry.json`
 - Spawns one local HTTP server (`cadence-serve`) bound to `127.0.0.1`, project-local port
 
 **What this plugin never does:**
+
 - No telemetry, no analytics, no usage pings
 - No outbound network calls from the hook
 - No reads outside `~/.claude/` (and within it, only the transcript Claude Code gave the hook)
@@ -182,10 +181,11 @@ The whole plugin is under 5,000 lines of code, with no build step and no third-p
 
 ## Architecture
 
-- **Hooks** ([`plugins/claudecadence/hooks/`](plugins/claudecadence/hooks/)) emit timeline nodes as a side effect of Claude Code's lifecycle events. Zero LLM cost. Filtered for signal — Bash hooks only fire on `git` / `gh` commands.
-- **Per-project viewer** ([`plugins/claudecadence/viewer/`](plugins/claudecadence/viewer/)) is a self-contained HTML page that polls its own `nodes.js` every 5 s and re-renders on change.
-- **Cross-project hub** ([`plugins/claudecadence/hub/`](plugins/claudecadence/hub/)) is the home page with the cadence list and status filters.
-- **Slash commands** ([`plugins/claudecadence/commands/`](plugins/claudecadence/commands/)) for `home` / `serve` / `stop` / `status` / `open`.
+- **Hooks** ([`plugins/claudecadence/hooks/`](plugins/claudecadence/hooks/)) emit timeline nodes as a side effect of Claude Code's lifecycle events. Zero LLM cost. Image attachments are extracted from the transcript with poll + content-match verification so they survive UPS-vs-transcript-flush races.
+- **Per-project viewer** ([`plugins/claudecadence/viewer/`](plugins/claudecadence/viewer/)) is a self-contained HTML page that polls its own `nodes.js` every 5 s and re-renders on change. The renderer emits flat editorial markup — no card chrome — with a stable-layout split that re-renders only the active turn while older turns sit in a frozen history zone.
+- **Cross-project hub** ([`plugins/claudecadence/hub/`](plugins/claudecadence/hub/)) is the home page with the cadence list, status filters, and 14-day activity heatmap.
+- **Slash commands** ([`plugins/claudecadence/commands/`](plugins/claudecadence/commands/)) for `home` / `serve` / `stop` / `status` / `open` / `doctor`.
+- **Design reference** ([`docs/design/index.html`](docs/design/index.html)) — the prototype that defines the editorial visual language. Open it locally to see the target.
 
 ## Local development
 
@@ -195,11 +195,21 @@ cd ClaudeCadence
 claude --plugin-dir ./plugins/claudecadence
 ```
 
-Iterate, then `/reload-plugins` to pick up changes without restarting Claude Code.
+Iterate, then `/reload-plugins` in any active Claude Code session to pick up changes without restarting it. The [hot-patch guide](CLAUDE.md#hot-patching-the-running-plugin-without-bumping-a-version) in `CLAUDE.md` documents the three filesystem surfaces that need to stay in sync when patching a running plugin.
+
+Run the test suite before opening a PR:
+
+```bash
+npm test
+```
+
+78 tests as of v2.7.0, zero external dependencies — a tiny custom runner in `test/run.js`.
 
 ## Design
 
-The visual language is Geist + Apricot — a sibling to the broader Claude design family without trying to be it. Restrained palette, generous whitespace, monospace numerics, kinetic type. Every visual decision is in [`viewer/_design.css`](plugins/claudecadence/viewer/_design.css) under named tokens — no inline magic colors anywhere.
+The visual language is Geist (sans) + Source Serif 4 (display) + Geist Mono (data) on an apricot-on-bone light palette and a warm-sage-on-charcoal dark. Restrained colour discipline (5–6 visible tokens per view), generous dotted dividers, monospace numerics, kinetic type at headline weights. Every visual decision is in [`viewer/_design.css`](plugins/claudecadence/viewer/_design.css) under named tokens — no inline magic colours anywhere. [`docs/design/index.html`](docs/design/index.html) is the canonical reference rendering.
+
+The inspiration: Thariq Shihipar's [*Using Claude Code: The Unreasonable Effectiveness of HTML*](https://thariqs.github.io/html-effectiveness/) — editorial discipline applied to engineering artifacts. ClaudeCadence is that pattern applied live, to your running session.
 
 ## License
 

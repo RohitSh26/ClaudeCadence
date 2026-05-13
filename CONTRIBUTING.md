@@ -24,11 +24,12 @@ The whole plugin is under 5,000 lines of code. Read it before changing it.
 
 ## Conventions
 
-- **Python:** stdlib only. No third-party deps. Targets Python 3.10+.
-- **JavaScript:** vanilla, no build step. Must work from `http://localhost:<port>/` AND `file://` (where browser CORS allows).
+- **Runtime:** Node.js only — the Node binary that ships with Claude Code. **No third-party runtime dependencies.** Stick to Node's standard library.
+- **JavaScript:** vanilla, no build step, no transpiler. Must work from `http://localhost:<port>/` AND `file://` (where browser CORS allows).
 - **CSS:** all colors, fonts, radii, shadows, motion easings come from named tokens in `viewer/_design.css`. No magic hex anywhere downstream.
 - **Hooks:** fail-soft. Any exception writes a stub diagnostic to stderr and exits 0. A broken viewer must never block a Claude Code session.
 - **No telemetry. No hosted services. Everything local.** This is the core promise. Don't add anything that violates it.
+- **Hot-patching:** when iterating against a running plugin, see the hot-patch guide in [`CLAUDE.md`](CLAUDE.md#hot-patching-the-running-plugin-without-bumping-a-version). Three filesystem surfaces (marketplace clone, versioned cache, project dir) must stay in sync or `bootstrapProject` will silently revert your project-dir patch on the next hook fire.
 
 ## Tests
 
@@ -55,7 +56,9 @@ For security issues, see [`SECURITY.md`](SECURITY.md) — do **not** open a publ
 
 ## Design changes
 
-The visual language is byte-faithful to Claude Design's iter6 specification (`sage on charcoal` dark / `apricot on bone` light). Changes that touch the visual language should reference an iter from the design system; otherwise you'll be asked to.
+The visual language is editorial — typographic discipline applied to engineering artifacts. The canonical reference is [`docs/design/index.html`](docs/design/index.html), a static prototype that demonstrates the target rendering with synthetic data. The live viewer is a port of that prototype.
+
+The palette is sage-on-charcoal dark / apricot-on-bone light, with five colour tokens visible in any given view (ink, mid, one accent, success, danger). Type stack: Geist (sans, structure), Source Serif 4 (display, prose), Geist Mono (data). Changes that introduce new tokens, new fonts, or new chrome should justify themselves against the prototype.
 
 ## License
 

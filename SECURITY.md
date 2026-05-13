@@ -11,20 +11,25 @@ If you trust the Node.js binary that Claude Code is already using, you trust Cla
 | Action | Where | When |
 |---|---|---|
 | Reads its hook input from `stdin` (JSON) | Per-event, ephemeral | On every Claude Code lifecycle hook |
-| Reads the active session transcript | `~/.claude/projects/<slug>/<session>.jsonl` | On `Stop` and `SubagentStop` |
-| Appends one or more nodes to `nodes.js` | `<project>/.claude/cadence/data/nodes.js` | On every hook event |
+| Reads the active session transcript | `~/.claude/projects/<slug>/<session>.jsonl` | On `UserPromptSubmit` (to extract image attachments), `Stop`, and `SubagentStop` |
+| Appends one or more nodes to `nodes.js` | `<project>/.claude/cadence/data/nodes.js` | On most hook events |
+| Persists prompt-attached image bytes | `<project>/.claude/cadence/images/<session>-<turn>-<idx>.{png,jpg}` | On `UserPromptSubmit` when the prompt has image content blocks. Caps: 5 MB per image (base64 length), max 5 per turn, 80-entry transcript lookback. Oversized images are silently skipped. |
 | Writes per-session bookkeeping | `<project>/.claude/cadence/.queue-*.txt`, `.cursor-*.txt`, `.current_turn.txt` | Per turn |
 | Registers in the cross-project hub registry | `~/.claude/cadence/registry.json` | On `SessionStart` |
 | Starts a local HTTP server (`cadence-serve`) | Binds `127.0.0.1` on a project-local port | First hook event in a session, if auto-serve is enabled |
 
-That's it. Everything else is rendering in your browser from the `nodes.js` file the plugin already produced.
+That's it. Everything else is rendering in your browser from the `nodes.js` file and the `images/` directory the plugin already produced.
+
+### A note on image attachments
+
+When you paste a screenshot or photo into a Claude Code prompt, the bytes are inlined in the transcript as a base64 `image` content block on the user message. v2.6+ persists those bytes to `.claude/cadence/images/` so the viewer can render the image inline in the prompt hero. **These files are stored in plaintext, in the same directory tree that already contains your prompt text and Claude's responses.** Treat the entire `.claude/cadence/` directory as you would treat any local log of your work. If an image was sensitive enough that you wouldn't want it on disk, don't attach it to the prompt.
 
 ## What this plugin never does
 
 - **No telemetry, no analytics, no usage pings.** Nothing about your sessions leaves your machine. There is no opt-in, opt-out, environment variable, or hidden setting that changes this — the code to do it doesn't exist.
 - **No outbound network calls from the hook itself.** The hook script never opens a socket, never resolves a hostname, never executes a remote command.
 - **No reads outside `~/.claude/`** — and even within `~/.claude/`, only the transcript file Claude Code already gives the hook in its payload.
-- **No writes outside `<project>/.claude/cadence/` and `~/.claude/cadence/`.** No touching your source tree.
+- **No writes outside `<project>/.claude/cadence/` and `~/.claude/cadence/`.** No touching your source tree. The image-persist path is fully contained under `<project>/.claude/cadence/images/`.
 - **No access to credentials, environment variables, or system files.** The hook only sees what Claude Code passes it via stdin and reads the transcript path Claude Code provided.
 - **No `eval()`, no dynamic code execution, no shell injection.** The hook never `exec`s a command derived from user input.
 - **No third-party dependencies.** Zero `package.json` runtime deps. The plugin runs on Node's standard library.
