@@ -19,7 +19,19 @@
   --apricot-100: #ffe5d2;
   --apricot-500: #fb923c;
   --apricot-600: #c2570b;
+  --apricot-700: #8b3f06;
   --apricot-glow: rgba(251, 146, 60, 0.18);
+
+  /* Sage — used by response band + sub-agent lane accents.
+     v2.5.3: was referenced by selectors in earlier appends but never
+     defined here, leaving the response band un-tinted on light. */
+  --sage-300:  #bcd5b9;
+  --sage-400:  #8db58b;
+  --sage-500:  #5f9763;
+  --sage-bg:   #eef4ec;
+
+  /* Violet — bash tag accent (matches the v2.5 ledger color map). */
+  --violet:    #6e4ea0;
 
   /* States */
   --success: #2f7a4d;
@@ -3035,6 +3047,15 @@ html, body { transition: background .25s ease-out, color .25s ease-out; }
   /* Secondary register — soft violet, scoped to "decision" */
   --violet-500: #c4b5fd;
   --violet-100: #1b1b2e;
+  --violet:     #b39ce0;
+
+  /* Sage — response band accent on dark. Bone is the surface; the band
+     uses bone with a sage left rule (per the prototype dark treatment),
+     so --sage-bg matches --bone exactly. */
+  --sage-300:  #364837;
+  --sage-400:  #87b08a;
+  --sage-500:  #a5cca0;
+  --sage-bg:   var(--bone);
 
   /* Shadows — voids beneath cards + 1px hairline highlight */
   --shadow-1: 0 1px 0 rgba(220,232,255,0.025) inset,
@@ -4631,3 +4652,123 @@ li.turn table.rollup td.path {
   word-break: break-word;
 }
 li.turn table.rollup td.path .dim { color: var(--neutral-400); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v2.5.3 — remaining mockup features:
+     · lane accordion on dispatch groups (click a lane to expand full-width;
+       siblings collapse to slim summary bars)
+     · scroll-snap feed (paged reading flow without forcing short turns)
+     · mobile rollup compaction (hide "at" column below 640px)
+     · session pulse — coordinate plot of every event on a time axis
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── scroll-snap feed ───────────────────────────────────────────────── */
+.workspace { scroll-snap-type: y proximity; }
+.workspace .timeline > li.turn {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+
+/* ── lane accordion ────────────────────────────────────────────────── */
+.dispatch-group .dispatch-lanes { transition: grid-template-columns 200ms ease; }
+.dispatch-group .dispatch-lane-col {
+  cursor: pointer;
+  position: relative;
+  transition: opacity 160ms ease, padding 160ms ease;
+}
+.dispatch-group .dispatch-lane-col::after {
+  content: '⤢';
+  position: absolute;
+  top: 4px; right: 8px;
+  font-size: 11px;
+  color: var(--neutral-400);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.dispatch-group .dispatch-lane-col:hover::after { opacity: 0.7; }
+.dispatch-group .dispatch-lanes:has(.dispatch-lane-col.is-expanded) {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.dispatch-group .dispatch-lane-col.is-expanded {
+  padding: 14px 18px;
+  background: color-mix(in oklab, var(--bone) 60%, transparent);
+  border-radius: 8px;
+  border-left: 3px solid var(--lane, var(--mid));
+}
+[data-theme="dark"] .dispatch-group .dispatch-lane-col.is-expanded {
+  background: color-mix(in oklab, var(--apricot-500) 6%, var(--bone));
+}
+.dispatch-group .dispatch-lane-col.is-expanded::after { content: '×'; opacity: 1; font-size: 14px; top: 10px; right: 12px; }
+.dispatch-group .dispatch-lanes:has(.dispatch-lane-col.is-expanded) .dispatch-lane-col:not(.is-expanded) {
+  padding: 6px 10px;
+  opacity: 0.7;
+}
+.dispatch-group .dispatch-lanes:has(.dispatch-lane-col.is-expanded) .dispatch-lane-col:not(.is-expanded):hover { opacity: 1; }
+.dispatch-group .dispatch-lanes:has(.dispatch-lane-col.is-expanded) .dispatch-lane-col:not(.is-expanded) .dispatch-lane-body { display: none; }
+.dispatch-group .dispatch-lanes:has(.dispatch-lane-col.is-expanded) .dispatch-lane-col:not(.is-expanded)::after { opacity: 0.5; }
+
+/* ── mobile rollup: hide "at" column under 640px ───────────────────── */
+@media (max-width: 640px) {
+  li.turn table.rollup th:nth-child(3),
+  li.turn table.rollup td:nth-child(3) { display: none; }
+}
+
+/* ── session pulse (spatial / coordinate plot at end of feed) ─────── */
+.session-pulse {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 56px 32px 80px;
+  border-top: 1px solid var(--soft);
+}
+.session-pulse .eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--mid);
+  margin-bottom: 6px;
+}
+.session-pulse h2 {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 400;
+  margin: 0 0 14px;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+.session-pulse .tape {
+  display: block;
+  width: 100%;
+  height: 96px;
+  background: color-mix(in oklab, var(--bone) 70%, transparent);
+  border-radius: 8px;
+  border: 1px solid var(--soft);
+}
+[data-theme="dark"] .session-pulse .tape {
+  background: var(--bone);
+  border-color: var(--soft);
+}
+.session-pulse .axis {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-400);
+  margin-top: 6px;
+  letter-spacing: 0.04em;
+}
+.session-pulse .legend {
+  margin-top: 16px;
+  display: flex; flex-wrap: wrap; gap: 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--mid);
+}
+.session-pulse .legend .sw {
+  display: inline-block;
+  width: 12px; height: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}

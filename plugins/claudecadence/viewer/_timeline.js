@@ -2252,7 +2252,99 @@
     } else {
       paintSessionMenu([]);
     }
+    // v2.5.3: render the session-pulse coordinate plot at the bottom of
+    // the feed. Always reflects the FILTERED node set (visible), not all.
+    paintSessionPulse(visible);
     applyViewMode();
+  }
+
+  // v2.5.3 — session pulse mini coordinate plot. Drawn at the bottom of
+  // the feed as a horizontal "tape" with one dot per event mapped to its
+  // wall-clock position between firstTs and lastTs. Color encodes kind.
+  function paintSessionPulse(nodes) {
+    const wrap = document.getElementById('session-pulse-mount')
+      || (function () {
+        const m = document.createElement('section');
+        m.id = 'session-pulse-mount';
+        m.className = 'session-pulse';
+        const wp = document.querySelector('.workspace');
+        if (wp) wp.appendChild(m);
+        return m;
+      })();
+    if (!wrap || !nodes || nodes.length < 2) {
+      wrap.innerHTML = '';
+      wrap.style.display = nodes && nodes.length ? '' : 'none';
+      return;
+    }
+    wrap.style.display = '';
+    const tsList = nodes.map(n => Date.parse(n.ts)).filter(Number.isFinite);
+    if (tsList.length < 2) { wrap.innerHTML = ''; return; }
+    const first = Math.min.apply(null, tsList);
+    const last  = Math.max.apply(null, tsList);
+    const span  = Math.max(1, last - first);
+
+    // Color per kind, matching the ledger tag palette.
+    function colorFor(n) {
+      const tags = n.tags || [];
+      if (tags.indexOf('prompt') !== -1) return 'var(--apricot-600)';
+      if (tags.indexOf('response') !== -1) return 'var(--sage-500)';
+      if (tags.indexOf('fork') !== -1)   return 'var(--apricot-500)';
+      if (tags.indexOf('merge') !== -1)  return 'var(--success)';
+      if (tags.indexOf('wrote') !== -1 || tags.indexOf('edited') !== -1) return 'var(--apricot-500)';
+      if (tags.indexOf('bash') !== -1)   return 'var(--violet)';
+      if (tags.indexOf('read') !== -1 || tags.indexOf('search') !== -1) return 'var(--info)';
+      if (n.status === 'failed') return 'var(--danger)';
+      return 'var(--neutral-400)';
+    }
+    function sizeFor(n) {
+      const tags = n.tags || [];
+      if (tags.indexOf('prompt') !== -1)   return 4;
+      if (tags.indexOf('response') !== -1) return 3.5;
+      if (tags.indexOf('fork') !== -1 || tags.indexOf('merge') !== -1) return 3.2;
+      return 2.4;
+    }
+
+    // Build SVG dots.
+    const W = 1000, H = 96;
+    let dots = '';
+    nodes.forEach(n => {
+      const t = Date.parse(n.ts);
+      if (!Number.isFinite(t)) return;
+      const x = ((t - first) / span) * (W - 12) + 6;
+      const cy = (n.tags || []).indexOf('prompt') !== -1 ? 40
+               : (n.tags || []).indexOf('response') !== -1 ? 56
+               : 67;
+      dots += `<circle cx="${x.toFixed(1)}" cy="${cy}" r="${sizeFor(n)}" fill="${colorFor(n)}"/>`;
+    });
+
+    // Axis labels — first / middle / last in HH:MM.
+    const mid = first + span / 2;
+    const fmt = ms => {
+      const d = new Date(ms);
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    };
+
+    wrap.innerHTML = `
+      <div class="eyebrow">session pulse</div>
+      <h2>${nodes.length} events · ${fmt(first)} → ${fmt(last)}</h2>
+      <svg class="tape" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Activity tape">
+        <line x1="0" y1="78" x2="${W}" y2="78" stroke="var(--soft)"/>
+        <line x1="${W/4}"   y1="14" x2="${W/4}"   y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+        <line x1="${W/2}"   y1="14" x2="${W/2}"   y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+        <line x1="${3*W/4}" y1="14" x2="${3*W/4}" y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+        ${dots}
+      </svg>
+      <div class="axis"><span>${fmt(first)}</span><span>${fmt(mid)}</span><span>${fmt(last)}</span></div>
+      <div class="legend">
+        <span><span class="sw" style="background: var(--apricot-600);"></span>prompt</span>
+        <span><span class="sw" style="background: var(--sage-500);"></span>response</span>
+        <span><span class="sw" style="background: var(--info);"></span>read / search</span>
+        <span><span class="sw" style="background: var(--apricot-500);"></span>edit · fork</span>
+        <span><span class="sw" style="background: var(--violet);"></span>bash</span>
+        <span><span class="sw" style="background: var(--success);"></span>merge</span>
+        <span><span class="sw" style="background: var(--danger);"></span>failure</span>
+      </div>
+    `;
   }
 
   function applyViewMode() {
@@ -2488,6 +2580,19 @@
         if (e.key === 'Escape') closeAll();
       });
     })();
+
+    // v2.5.3 — lane accordion. Click any sub-agent lane to expand it
+    // full-width; siblings collapse to slim summary bars. Event delegation
+    // on document.body covers lanes that are added by future renders.
+    document.body.addEventListener('click', (e) => {
+      const lane = e.target.closest('.dispatch-lane-col');
+      if (!lane) return;
+      const group = lane.closest('.dispatch-lanes');
+      if (!group) return;
+      const wasExpanded = lane.classList.contains('is-expanded');
+      group.querySelectorAll('.dispatch-lane-col').forEach(l => l.classList.remove('is-expanded'));
+      if (!wasExpanded) lane.classList.add('is-expanded');
+    });
     document.addEventListener('keydown', e => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault(); document.getElementById('search').focus();

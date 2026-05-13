@@ -18,6 +18,18 @@ All notable changes to ClaudeCadence are documented here. Format follows [Keep a
 ### Note
 - This is step 1 of the editorial port. Step 2 ports the prompt hero / phase anchors / response band into the live turn renderer. Step 3 ports the full-bleed reading-feed layout. The prototype at `docs/design/index.html` remains the visual reference for both.
 
+## [2.5.3] – 2026-05-13
+
+### Added — feature parity with the design prototype (port step 3)
+- **Session pulse coordinate plot.** A horizontal "tape" rendered at the bottom of the feed plots every captured event on a wall-clock axis. Color encodes kind (prompt apricot · response sage · read/search info · edit/fork apricot-warm · bash violet · merge success · failure danger). Two vertical bands separate prompts (top), responses (mid), and tool events (bottom). Axis tick labels show first/middle/last `HH:MM`.
+- **Lane accordion on dispatch groups.** Click any sub-agent lane to expand it full-width with siblings collapsing to slim summary bars (matches the prototype dispatch UX). Re-click the expanded lane to return to the equal-split layout. Implemented via CSS `:has()` + a delegated click handler so future dispatches inherit the behavior automatically.
+- **Scroll-snap reading feed.** `.workspace` uses `scroll-snap-type: y proximity` and each `li.turn` snaps to the top of the viewport — the TikTok-feel paged reading flow from the mockup, without forcing short turns mid-viewport.
+- **Mobile rollup compaction.** Under 640px the rollup table hides the "at" timestamp column so file + change deltas stay readable on narrow screens.
+
+### Fixed
+- **Sage tokens missing from `:root`.** `--sage-bg`, `--sage-300/400/500` were referenced by selectors added in v2.5.x but never defined, so the response band had no sage tint on light. Now defined in `:root` (matching the prototype palette) and overridden in `[data-theme="dark"]` to a deeper sage on charcoal.
+- **`--violet` token missing.** Bash tag color cascaded to mid-gray instead of the v2.4 violet. Now defined in both themes.
+
 ## [2.5.2] – 2026-05-13
 
 ### Fixed
