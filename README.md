@@ -149,6 +149,17 @@ your-project/
 
 Nothing leaves your machine. The "live" indicator pulse is a CSS animation — there's no server-side anything.
 
+### Add `.claude/cadence/` to your project's `.gitignore`
+
+The per-project cadence directory grows quickly (4 MB+ of `nodes.js` and base64-decoded image attachments after a busy day) and is **strictly local state**. Add this to your project's `.gitignore` so it never accidentally gets committed:
+
+```gitignore
+# ClaudeCadence — local session log + viewer + attached images. Never check in.
+.claude/cadence/
+```
+
+Branch switches are then safe: the cadence directory stays untracked and persists across checkouts unaffected by what's on the branch.
+
 ## Safety
 
 The whole plugin is around 6,000 lines of code, with no build step and no third-party runtime dependencies. You can read it end-to-end in 20 minutes. [`SECURITY.md`](SECURITY.md) is the full policy; the short list:
