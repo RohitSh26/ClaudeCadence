@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClaudeCadence · feed prototype</title>
+<script>
+  /* Apply theme BEFORE first paint to avoid a flash. localStorage wins,
+     OS preference is the fallback on first visit. */
+  (function () {
+    var KEY = 'cadence_design_theme';
+    var stored = null;
+    try { stored = localStorage.getItem(KEY); } catch (_) {}
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', stored || (prefersDark ? 'dark' : 'light'));
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">
+<style>
+  /* ── tokens (light is the default) ─────────────────────────────────── */
+  :root {
+    --ink:        #0a0a0a;
+    --graphite:   #1a1a1a;
+    --paper:      #fafaf7;
+    --bone:       #f0eee9;
+    --soft:       #e8e6e0;
+    --mid:        #6b6b6b;
+    --neutral-300:#d4d2cc;
+    --neutral-400:#a8a6a0;
+    --neutral-700:#2e2e2c;
+
+    --apricot-100:#ffe5d2;
+    --apricot-500:#fb923c;
+    --apricot-600:#c2570b;
+    --apricot-700:#8b3f06;
+
+    --sage-300:   #bcd5b9;
+    --sage-400:   #8db58b;
+    --sage-500:   #5f9763;
+    --sage-bg:    #eef4ec;
+
+    --success:    #2f7a4d;
+    --danger:     #b53d3d;
+    --warning:    #a36c0e;
+    --info:       #2c5f8f;
+    --violet:     #6e4ea0;
+
+    /* Semantic tag colors — used by ledger tags and dispatch lanes.
+       Picked for contrast on both bone and charcoal backgrounds. */
+    --tag-read:   var(--info);
+    --tag-edit:   var(--apricot-600);
+    --tag-bash:   var(--violet);
+    --tag-search: var(--info);
+    --tag-fork:   var(--apricot-600);
+    --tag-merge:  var(--success);
+    --tag-fail:   var(--danger);
+
+    /* Tint behind the phase number column — anchors the eye without a card. */
+    --phase-tint: color-mix(in oklab, var(--apricot-100) 35%, transparent);
+
+    /* Syntax tokens — used by .excerpt and inline <code> blocks.
+       Picked so a single palette reads on both light and dark surfaces. */
+    --syntax-kw:    #6e4ea0;   /* keyword (def, end, return) */
+    --syntax-fn:    #2c5f8f;   /* function / method */
+    --syntax-str:   #b15a14;   /* string */
+    --syntax-sym:   #a36c0e;   /* symbol / atom */
+    --syntax-const: #2f7a4d;   /* constant / class */
+    --syntax-num:   #a36c0e;
+    --syntax-cmt:   #8a857c;
+    --syntax-punct: #6b6b6b;
+
+    --font-sans:  'Geist','Inter',-apple-system,system-ui,sans-serif;
+    --font-serif: 'Source Serif 4',Georgia,serif;
+    --font-mono:  'Geist Mono','JetBrains Mono','SF Mono',Menlo,monospace;
+    --prose-width: 64ch;
+
+    --header-h: 52px;
+  }
+
+  /* ── dark mode — sage on charcoal, tuned for long-session reading ───
+     Strategy: a single near-black for surface, two warm-leaning neutrals
+     for chrome, sage as the calm accent for response/merge, apricot
+     reserved for fork/prompt eyebrow. Contrast targets:
+       — body copy on surface: ~12:1
+       — secondary mono on surface: ~6:1
+       — accents on surface: ≥4.5:1 (WCAG AA) */
+  [data-theme="dark"] {
+    /* WARM dark — newsprint printed on dark paper, not blue-charcoal.
+       Three surface levels: paper (deepest) < bone (response band) < soft
+       (borders). Body type is bone, mid is warm gray, accents stay warm. */
+    --ink:        #ece6d8;
+    --graphite:   #d6cfbf;
+    --paper:      #0c0b09;
+    --bone:       #15130f;   /* next surface up — used by response band */
+    --soft:       #2a2620;   /* warm borders */
+    --mid:        #9c958a;
+    --neutral-300:#3a352f;
+    --neutral-400:#8a837a;
+    --neutral-700:#cac3b5;
+
+    /* warm peach for accents — not peachy-pink, more like burnt orange */
+    --apricot-100:#2e1d10;
+    --apricot-500:#ec9358;
+    --apricot-600:#ea8a4a;
+    --apricot-700:#f3a570;
+
+    /* sage muted — used only as the response left-rule on dark */
+    --sage-300:   #364837;
+    --sage-400:   #87b08a;
+    --sage-500:   #a5cca0;
+    --sage-bg:    var(--bone);   /* NO chroma tint — elevation only */
+
+    --success:    #7dc097;
+    --danger:     #e89090;
+    --warning:    #e0b070;
+    --info:       #8db8e0;
+    --violet:     #b39ce0;
+
+    --tag-read:   var(--info);
+    --tag-edit:   var(--apricot-500);
+    --tag-bash:   var(--violet);
+    --tag-search: var(--info);
+    --tag-fork:   var(--apricot-500);
+    --tag-merge:  var(--success);
+    --tag-fail:   var(--danger);
+
+    --phase-tint: color-mix(in oklab, var(--apricot-500) 8%, transparent);
+
+    /* Syntax tokens for dark — slightly lifted hues so they read against
+       the warm-charcoal paper. Same color family as light, more brightness. */
+    --syntax-kw:    #b39ce0;
+    --syntax-fn:    #8db8e0;
+    --syntax-str:   #ec9358;
+    --syntax-sym:   #e0b070;
+    --syntax-const: #7dc097;
+    --syntax-num:   #e0b070;
+    --syntax-cmt:   #8a837a;
+    --syntax-punct: #cac3b5;
+  }
+
+  *,*::before,*::after { box-sizing: border-box; }
+  html,body { margin:0; padding:0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Selection — apricot warmth, low alpha so type stays the hero. */
+  ::selection {
+    background: color-mix(in oklab, var(--apricot-500) 30%, transparent);
+    color: inherit;
+  }
+  /* Subtle hairline at the very top of viewport — gives dark mode a
+     defined "edge" without a heavy border. Light mode hides it. */
+  [data-theme="dark"] body::before {
+    content: '';
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--apricot-500) 30%, transparent) 50%, transparent 100%);
+    z-index: 60;
+    pointer-events: none;
+  }
+
+  /* Syntax-token classes — used both in <pre class="excerpt"> blocks and
+     in inline <code> when explicitly tokenized. */
+  .tok-kw    { color: var(--syntax-kw); }
+  .tok-fn    { color: var(--syntax-fn); }
+  .tok-str   { color: var(--syntax-str); }
+  .tok-sym   { color: var(--syntax-sym); }
+  .tok-const { color: var(--syntax-const); }
+  .tok-num   { color: var(--syntax-num); }
+  .tok-cmt   { color: var(--syntax-cmt); font-style: italic; }
+  .tok-punct { color: var(--syntax-punct); }
+
+  /* ── sticky thin header ────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    height: var(--header-h);
+    background: color-mix(in oklab, var(--paper) 92%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--soft);
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 14px;
+    padding: 0 24px;
+  }
+  .topbar .brand {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mid);
+    white-space: nowrap;
+  }
+  .topbar .brand strong { color: var(--ink); font-weight: 500; }
+  .topbar .brand .proj  {
+    color: var(--apricot-600);
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 13px;
+    margin-left: 6px;
+  }
+
+  /* session dropdown trigger */
+  .session-trigger {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: transparent;
+    border: 0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--neutral-700);
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .session-trigger:hover { background: var(--bone); color: var(--ink); }
+  .session-trigger .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--neutral-400);
+  }
+  .session-trigger .id {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .session-trigger .caret { font-size: 10px; color: var(--mid); }
+
+  .filter-trigger {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent;
+    border: 1px solid var(--soft);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--neutral-700);
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  .filter-trigger:hover { border-color: var(--apricot-500); color: var(--apricot-700); }
+  .filter-trigger .count {
+    background: var(--ink); color: var(--paper);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .filter-trigger.is-empty .count { display: none; }
+
+  /* theme toggle — sun / moon icons swap based on data-theme */
+  .theme-toggle {
+    width: 32px; height: 32px;
+    border: 1px solid var(--soft);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--mid);
+    transition: color 120ms ease, border-color 120ms ease;
+  }
+  .theme-toggle:hover { color: var(--apricot-600); border-color: var(--apricot-500); }
+  .theme-toggle svg { width: 14px; height: 14px; }
+  .theme-toggle .sun  { display: block; }
+  .theme-toggle .moon { display: none; }
+  [data-theme="dark"] .theme-toggle .sun  { display: none; }
+  [data-theme="dark"] .theme-toggle .moon { display: block; }
+
+  /* ── filter overlay (drawer) ──────────────────────────────────────── */
+  .filter-overlay {
+    position: fixed; left: 0; right: 0; top: var(--header-h); z-index: 40;
+    background: var(--paper);
+    border-bottom: 1px solid var(--soft);
+    padding: 22px 32px 24px;
+    box-shadow: 0 12px 24px color-mix(in oklab, var(--ink) 6%, transparent);
+    transform: translateY(-100%);
+    transition: transform 200ms cubic-bezier(0.16,1,0.3,1);
+  }
+  .filter-overlay.is-open { transform: translateY(0); }
+  [data-theme="dark"] .filter-overlay {
+    background: var(--bone);
+    box-shadow: 0 16px 36px rgba(0,0,0,0.55);
+  }
+  .filter-overlay .row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 18px;
+    padding: 6px 0;
+    border-bottom: 1px dotted var(--soft);
+    align-items: baseline;
+  }
+  .filter-overlay .row:last-child { border-bottom: none; }
+  .filter-overlay .row > label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--neutral-400);
+  }
+  .filter-overlay .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-overlay .chip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    border: 1px solid var(--soft);
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--neutral-700);
+    cursor: pointer;
+  }
+  .filter-overlay .chip:hover { border-color: var(--apricot-500); color: var(--apricot-700); }
+  .filter-overlay .chip.is-active {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  .filter-overlay .search input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--soft);
+    padding: 6px 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+  .filter-overlay .search input:focus { border-bottom-color: var(--apricot-500); }
+  .filter-overlay .row-end {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .filter-overlay .row-end button {
+    font-family: inherit; font-size: inherit;
+    background: transparent; border: 0;
+    color: var(--mid); cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .filter-overlay .row-end button:hover { background: var(--bone); color: var(--ink); }
+
+  .scrim {
+    position: fixed; inset: 0 0 0 0;
+    /* explicit black so it dims in both themes (mixing --ink would invert
+       on dark, brightening the screen — the opposite of what we want). */
+    background: rgba(0, 0, 0, 0.32);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+    z-index: 30;
+  }
+  [data-theme="dark"] .scrim { background: rgba(0, 0, 0, 0.55); }
+  .scrim.is-open { opacity: 1; pointer-events: auto; }
+
+  /* ── session dropdown ─────────────────────────────────────────────── */
+  .session-menu {
+    position: fixed; top: calc(var(--header-h) + 8px); left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    width: min(560px, 92vw);
+    z-index: 45;
+    background: var(--paper);
+    border: 1px solid var(--soft);
+    border-radius: 14px;
+    box-shadow:
+      0 1px 0 0 color-mix(in oklab, var(--ink) 6%, transparent) inset,
+      0 24px 60px color-mix(in oklab, var(--ink) 16%, transparent);
+    overflow: hidden;
+    opacity: 0; pointer-events: none;
+    transition: opacity 160ms ease, transform 200ms cubic-bezier(0.16,1,0.3,1);
+  }
+  [data-theme="dark"] .session-menu {
+    background: var(--bone);
+    border-color: var(--soft);
+    box-shadow:
+      0 1px 0 0 color-mix(in oklab, var(--apricot-500) 8%, transparent) inset,
+      0 28px 60px rgba(0,0,0,0.55);
+  }
+  .session-menu.is-open {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  .session-menu .menu-head {
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--soft);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--neutral-400);
+  }
+  .session-menu .item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 14px 20px;
+    border-bottom: 1px dotted var(--soft);
+    cursor: pointer;
+  }
+  .session-menu .item:last-child { border-bottom: none; }
+  .session-menu .item:hover { background: var(--bone); }
+  .session-menu .item.is-active { background: color-mix(in oklab, var(--apricot-100) 50%, transparent); }
+  .session-menu .item .title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .session-menu .item .sub {
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .session-menu .item .right {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .session-menu .pip {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; margin-right: 6px; vertical-align: middle;
+  }
+  .session-menu .pip.live   { background: var(--success); box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 25%, transparent); }
+  .session-menu .pip.stale  { background: var(--apricot-500); }
+  .session-menu .pip.idle   { background: var(--neutral-300); }
+
+  /* ── feed ─────────────────────────────────────────────────────────── */
+  .feed {
+    /* scroll-snap optional; proximity gives the "paged" feel without
+       forcing short turns into the middle of the viewport. */
+    scroll-snap-type: y proximity;
+  }
+  .turn {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+    padding: 80px 32px 96px;
+    border-bottom: 1px dotted var(--neutral-300);
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .turn:last-child { border-bottom: none; }
+
+  /* ── turn metadata strip ──────────────────────────────────────────── */
+  .turn-meta {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    letter-spacing: 0.02em;
+    margin-bottom: 22px;
+  }
+  .turn-meta .k { color: var(--neutral-400); }
+  .turn-meta .v { color: var(--neutral-700); }
+  .turn-meta .status-pip {
+    width: 6px; height: 6px; border-radius: 50%;
+    display: inline-block; margin-right: 5px; vertical-align: middle;
+  }
+  .turn-meta .status-pip.replied  { background: var(--success); }
+  .turn-meta .status-pip.failed   { background: var(--danger); }
+  .turn-meta .status-pip.working  { background: var(--apricot-500); box-shadow: 0 0 0 3px color-mix(in oklab, var(--apricot-500) 22%, transparent); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--apricot-500) 22%, transparent); }
+    50%     { box-shadow: 0 0 0 5px color-mix(in oklab, var(--apricot-500) 8%, transparent); }
+  }
+
+  /* ── prompt hero ──────────────────────────────────────────────────── */
+  .prompt-hero { margin: 0 0 40px; }
+  .prompt-hero .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--apricot-600);
+    margin-bottom: 14px;
+  }
+  .prompt-hero .eyebrow .who {
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--mid);
+    font-family: var(--font-serif);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .prompt-hero h1 {
+    font-family: var(--font-serif);
+    font-size: clamp(24px, 3.2vw, 34px);
+    font-weight: 400;
+    line-height: 1.22;
+    letter-spacing: -0.013em;
+    margin: 0;
+    max-width: var(--prose-width);
+    color: var(--ink);
+  }
+  .prompt-hero .lede {
+    margin-top: 14px;
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--neutral-700);
+    max-width: var(--prose-width);
+    font-weight: 400;
+  }
+  .prompt-hero.decision h1 {
+    font-family: var(--font-mono);
+    font-size: clamp(20px, 2.4vw, 26px);
+    color: var(--apricot-700);
+  }
+
+  /* ── phase anchor ─────────────────────────────────────────────────── */
+  .phase {
+    margin: 48px 0 14px;
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 18px;
+    align-items: baseline;
+    padding: 8px 0 10px;
+    border-bottom: 1px dotted var(--neutral-300);
+    position: relative;
+  }
+  /* Anchor for the phase number column. On light, a soft warm wash sits
+     behind the numeral. On dark, the wash reads as a glow against the
+     charcoal — too loud — so we swap it for a thin apricot left rule, the
+     editorial pull-quote move. Same visual hierarchy, much quieter. */
+  .phase::before {
+    content: '';
+    position: absolute;
+    left: -6px; top: 0; bottom: 0;
+    width: 76px;
+    background: var(--phase-tint);
+    border-radius: 6px;
+    z-index: -1;
+  }
+  [data-theme="dark"] .phase::before {
+    left: -10px; top: 6px; bottom: 6px;
+    width: 2px;
+    background: var(--apricot-500);
+    opacity: 0.55;
+    border-radius: 1px;
+  }
+  .phase .n {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--apricot-600);
+    letter-spacing: 0.14em;
+    font-weight: 500;
+    align-self: start;
+    padding-top: 4px;
+  }
+  .phase h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+    margin: 0;
+    color: var(--ink);
+  }
+  .phase .stat {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    white-space: nowrap;
+  }
+  .phase .stat .num { color: var(--neutral-700); }
+  .phase .stat .add { color: var(--success); }
+  .phase .stat .del { color: var(--danger); }
+
+  /* ── ledger list ──────────────────────────────────────────────────── */
+  .ledger {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--neutral-700);
+    margin: 0; padding: 0; list-style: none;
+  }
+  .ledger li {
+    padding: 5px 0;
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 14px;
+    border-bottom: 1px dotted var(--soft);
+  }
+  .ledger li:last-child { border-bottom: none; }
+  .ledger .t { color: var(--mid); font-feature-settings: 'tnum'; }
+  .ledger .what { color: var(--ink); }
+  .ledger .what .dim { color: var(--neutral-400); }
+  .ledger .tag {
+    color: var(--mid);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  /* Per-tag semantic color — keeps the timeline readable at a glance
+     without adding chrome. Same hues used by the dispatch lane rules. */
+  .ledger .tag[data-kind="read"]   { color: var(--tag-read); }
+  .ledger .tag[data-kind="edit"]   { color: var(--tag-edit); }
+  .ledger .tag[data-kind="bash"]   { color: var(--tag-bash); }
+  .ledger .tag[data-kind="search"] { color: var(--tag-search); }
+  .ledger .tag[data-kind="fork"]   { color: var(--tag-fork); }
+  .ledger .tag[data-kind="merge"]  { color: var(--tag-merge); }
+  .ledger .tag[data-kind="fail"],
+  .ledger .tag.fail                { color: var(--tag-fail); }
+
+  /* ── rollup table ─────────────────────────────────────────────────── */
+  .rollup {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin: 0 0 8px;
+  }
+  .rollup th, .rollup td {
+    text-align: left;
+    padding: 6px 0;
+    border-bottom: 1px dotted var(--soft);
+    vertical-align: top;
+  }
+  .rollup th {
+    font-weight: 400;
+    color: var(--neutral-400);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding-bottom: 8px;
+    border-bottom-color: var(--neutral-300);
+  }
+  .rollup tr:last-child td { border-bottom: none; }
+  .rollup td.path { color: var(--ink); }
+  .rollup td.path .dim { color: var(--neutral-400); }
+  .rollup td.t { color: var(--mid); font-feature-settings: 'tnum'; }
+  .rollup td.delta .add { color: var(--success); }
+  .rollup td.delta .del { color: var(--danger); }
+
+  /* ── diff excerpt ─────────────────────────────────────────────────── */
+  .excerpt {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    background: var(--bone);
+    border-left: 2px solid var(--neutral-300);
+    padding: 10px 14px;
+    margin: 12px 0 8px;
+    overflow-x: hidden;
+    /* pre-wrap (not pre) so long Ruby lines visibly wrap instead of
+       overflowing the container — fixes the mobile clipping where the
+       start of every line was scrolled off-screen. */
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  /* Each diff "line" is a top-level span — full row background, wraps
+     inside its own width. inline-block + min-width 100% gives the row
+     tint; word-break inherited handles long URLs/strings. */
+  .excerpt .add,
+  .excerpt .del {
+    display: inline-block;
+    min-width: 100%;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .excerpt .add  { background: color-mix(in oklab, var(--success) 10%, transparent); color: var(--success); }
+  .excerpt .del  { background: color-mix(in oklab, var(--danger) 10%, transparent); color: var(--danger); }
+  .excerpt .hunk { color: var(--apricot-600); }
+  .excerpt .meta { color: var(--mid); }
+
+  /* ── dispatch (fork → lanes → merge) ──────────────────────────────── */
+  .dispatch {
+    margin: 14px 0 6px;
+    padding: 0;
+  }
+  .dispatch-stamp {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    align-items: baseline;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    letter-spacing: 0.02em;
+  }
+  .dispatch-stamp .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--ink);
+    margin: 0 auto;
+  }
+  .dispatch-stamp.is-merge .dot { background: var(--success); }
+  .dispatch-stamp .label { color: var(--ink); font-weight: 500; }
+  .dispatch-stamp .at    { color: var(--neutral-400); font-feature-settings: 'tnum'; }
+  .dispatch-stamp .agent { color: var(--mid); font-style: italic; font-family: var(--font-serif); }
+
+  /* The SVG fan — thin curves from a single anchor to N lane positions,
+     mirrored on the merge side. Drawn into a fixed-height band that
+     aligns visually with the lane grid below. */
+  .dispatch-fan {
+    width: 100%;
+    height: 56px;
+    display: block;
+    opacity: 0.65;
+  }
+  [data-theme="dark"] .dispatch-fan { opacity: 0.85; }
+  .dispatch-fan path {
+    fill: none;
+    stroke-width: 1.25;
+    stroke-linecap: round;
+  }
+  [data-theme="dark"] .dispatch-fan path { stroke-width: 1.5; }
+  .dispatch-fan.is-merge {
+    transform: scaleY(-1);
+  }
+
+  .dispatch-lanes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    padding: 0 4px;
+    transition: gap 200ms ease;
+  }
+  /* When any lane in this group is .is-expanded, the grid collapses to a
+     single column and non-expanded siblings shrink to slim summary bars.
+     Achieved with :has() — modern browsers only, falls back gracefully. */
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .dispatch-lane {
+    border-left: 2px solid var(--neutral-300);
+    padding: 6px 0 6px 12px;
+    min-width: 0;
+    cursor: pointer;
+    transition: opacity 160ms ease, padding 160ms ease;
+  }
+  .dispatch-lane:hover .name { color: var(--apricot-600); }
+  .dispatch-lane.is-backend { border-left-color: var(--info); }
+  .dispatch-lane.is-ui      { border-left-color: var(--apricot-500); }
+  .dispatch-lane.is-tests   { border-left-color: var(--sage-500); }
+  .dispatch-lane .name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    transition: color 120ms ease;
+  }
+  .dispatch-lane .ts {
+    margin-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--neutral-400);
+    font-feature-settings: 'tnum';
+  }
+  .dispatch-lane .what {
+    font-family: var(--font-serif);
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: var(--neutral-700);
+    margin-top: 5px;
+  }
+  .dispatch-lane .stat {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .dispatch-lane .stat .add { color: var(--success); }
+  .dispatch-lane .stat .del { color: var(--danger); }
+  .dispatch-lane.is-pending { opacity: 0.55; border-left-style: dashed; }
+  /* Tiny chevron hint at the top-right of each lane so users know it expands. */
+  .dispatch-lane { position: relative; }
+  .dispatch-lane::after {
+    content: '⤢';
+    position: absolute;
+    top: 4px; right: 6px;
+    font-size: 11px;
+    color: var(--neutral-400);
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+  }
+  .dispatch-lane:hover::after { opacity: 0.7; }
+
+  /* Expanded lane: full width, generous padding, ::after rotates */
+  .dispatch-lane.is-expanded {
+    padding: 12px 16px 14px;
+    background: color-mix(in oklab, var(--bone) 50%, transparent);
+    border-radius: 6px;
+    border-left-width: 3px;
+  }
+  .dispatch-lane.is-expanded::after { content: '×'; opacity: 1; font-size: 14px; top: 8px; right: 12px; }
+  .dispatch-lane.is-expanded .what { font-size: 16px; line-height: 1.55; max-width: var(--prose-width); }
+
+  /* Collapsed siblings: slim summary row — name + stat only, no description. */
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded) {
+    padding: 8px 10px 8px 12px;
+    opacity: 0.75;
+  }
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded):hover { opacity: 1; }
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded) .what {
+    display: none;
+  }
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded) .stat {
+    display: inline-block;
+    margin-top: 0;
+    margin-left: 12px;
+  }
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded) .name {
+    display: inline-block;
+  }
+  .dispatch-lanes:has(.dispatch-lane.is-expanded) .dispatch-lane:not(.is-expanded)::after { content: '⤢'; opacity: 0.5; }
+
+  /* ── workflow (boxes → arrows) ────────────────────────────────────── */
+  .workflow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--neutral-700);
+  }
+  .workflow .step {
+    padding: 6px 12px;
+    border: 1px solid var(--neutral-300);
+    border-radius: 6px;
+    background: var(--paper);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.3;
+  }
+  .workflow .step .label { color: var(--ink); font-weight: 500; }
+  .workflow .step .sub   { color: var(--mid); font-size: 10px; letter-spacing: 0.02em; margin-top: 2px; }
+  .workflow .step.is-ok {
+    border-color: color-mix(in oklab, var(--success) 35%, transparent);
+    background: color-mix(in oklab, var(--success) 8%, var(--paper));
+  }
+  .workflow .step.is-ok .label  { color: var(--success); }
+  .workflow .step.is-fail {
+    border-color: color-mix(in oklab, var(--danger) 50%, transparent);
+    background: color-mix(in oklab, var(--danger) 10%, var(--paper));
+  }
+  .workflow .step.is-fail .label { color: var(--danger); font-weight: 600; }
+  .workflow .step.is-blocked {
+    border-style: dashed;
+    opacity: 0.55;
+  }
+  .workflow .arrow {
+    color: var(--neutral-400);
+    font-size: 14px;
+    line-height: 1;
+  }
+  .workflow .arrow.is-blocked { color: var(--danger); }
+  [data-theme="dark"] .workflow .step { background: var(--bone); }
+  [data-theme="dark"] .workflow .step.is-ok   { background: color-mix(in oklab, var(--success) 12%, var(--bone)); }
+  [data-theme="dark"] .workflow .step.is-fail { background: color-mix(in oklab, var(--danger)  14%, var(--bone)); }
+
+  /* ── figure (embedded inline SVG mockup) ──────────────────────────── */
+  figure.shot {
+    margin: 14px 0 6px;
+    padding: 0;
+  }
+  figure.shot .frame {
+    border: 1px solid var(--soft);
+    border-radius: 8px;
+    background: var(--paper);
+    overflow: hidden;
+    box-shadow: 0 4px 14px color-mix(in oklab, var(--ink) 4%, transparent);
+  }
+  figure.shot svg { display: block; width: 100%; height: auto; }
+  figure.shot figcaption {
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+  [data-theme="dark"] figure.shot .frame {
+    background: var(--bone);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+  }
+
+  /* ── session pulse (spatial / coordinate plot) ────────────────────── */
+  .pulse-section {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 56px 32px 80px;
+    border-top: 1px solid var(--soft);
+  }
+  .pulse-section .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--mid);
+    margin-bottom: 6px;
+  }
+  .pulse-section h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    margin: 0 0 14px;
+    color: var(--ink);
+  }
+  .pulse-tape {
+    display: block;
+    width: 100%;
+    height: 96px;
+    background: color-mix(in oklab, var(--bone) 70%, transparent);
+    border-radius: 8px;
+    border: 1px solid var(--soft);
+  }
+  [data-theme="dark"] .pulse-tape {
+    background: var(--bone);
+    border-color: var(--soft);
+  }
+  .pulse-section .axis {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--neutral-400);
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+  }
+  .pulse-section .legend {
+    margin-top: 16px;
+    display: flex; flex-wrap: wrap; gap: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .pulse-section .legend .sw {
+    display: inline-block;
+    width: 12px; height: 8px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .dispatch-summary {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    text-align: center;
+  }
+  .dispatch-summary strong { color: var(--ink); font-weight: 500; }
+
+  /* ── response band ────────────────────────────────────────────────── */
+  .response {
+    margin-top: 48px;
+    padding: 32px 32px 28px;
+    background: var(--sage-bg);
+    border-top: 1px solid var(--sage-300);
+  }
+  .response.is-failed {
+    background: color-mix(in oklab, var(--danger) 8%, var(--paper));
+    border-top-color: color-mix(in oklab, var(--danger) 35%, transparent);
+  }
+  /* On dark the green tint reads as a swampy band against charcoal. Strip
+     the chroma and use a left-rule accent — same editorial move as the
+     apricot rule on the phase row. The band still differentiates from
+     surrounding content via the elevation (bone vs paper). */
+  [data-theme="dark"] .response {
+    background: var(--bone);
+    border-top: 1px dotted var(--soft);
+    border-left: 3px solid var(--sage-500);
+    padding-left: 29px;   /* 32 − 3 to keep visual indent constant */
+  }
+  [data-theme="dark"] .response.is-failed {
+    background: var(--bone);
+    border-top: 1px dotted var(--soft);
+    border-left: 3px solid var(--danger);
+  }
+  .response .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--sage-500);
+    margin-bottom: 12px;
+  }
+  .response.is-failed .eyebrow { color: var(--danger); }
+  .response .eyebrow .who {
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--neutral-700);
+    font-family: var(--font-serif);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .response h3 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+    margin: 0 0 12px;
+    max-width: var(--prose-width);
+    color: var(--graphite);
+  }
+  .response p, .response ul {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--neutral-700);
+    margin: 8px 0;
+    max-width: var(--prose-width);
+  }
+  .response ul { padding-left: 22px; }
+  .response li { margin-bottom: 4px; }
+  .response code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: color-mix(in oklab, var(--sage-300) 50%, transparent);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--graphite);
+  }
+  .response.is-failed code { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+  /* Dark: drop the green chip background — it competes with the new sage
+     left-rule treatment. Use a warm dark chip instead, like inline code in
+     Linear / claude.ai dark modes. */
+  [data-theme="dark"] .response code {
+    background: color-mix(in oklab, var(--apricot-500) 12%, var(--bone));
+    color: var(--apricot-700);
+    border: 1px solid color-mix(in oklab, var(--apricot-500) 18%, transparent);
+  }
+  [data-theme="dark"] .response.is-failed code {
+    background: color-mix(in oklab, var(--danger) 14%, var(--bone));
+    color: var(--danger);
+    border: 1px solid color-mix(in oklab, var(--danger) 24%, transparent);
+  }
+
+  /* ── small viewport ───────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .topbar { padding: 0 14px; grid-template-columns: auto 1fr auto; gap: 8px; }
+    .topbar .brand .proj { display: none; }
+    .session-trigger .label { display: none; }
+    .turn { padding: 60px 18px 64px; }
+    .phase { grid-template-columns: 44px 1fr; gap: 12px; }
+    .phase .stat { grid-column: 2; }
+    .response { margin-left: -18px; margin-right: -18px; padding: 24px 18px; }
+    .ledger li { grid-template-columns: 56px 1fr; }
+    .ledger .tag { grid-column: 2; padding-left: 0; color: var(--neutral-400); font-style: italic; }
+    .rollup th:nth-child(3),
+    .rollup td:nth-child(3) { display: none; }
+
+    /* On narrow screens, the lane grid stacks vertically and we hide the
+       SVG fan — a horizontal fan in 360 px doesn't communicate anything
+       useful. The stamp + colored left rules still convey the structure. */
+    .dispatch-lanes { grid-template-columns: 1fr; gap: 10px; }
+    .dispatch-fan { display: none; }
+    .dispatch-stamp { grid-template-columns: 14px 1fr auto; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    claude<strong>cadence</strong>
+    <span class="proj">BloomList</span>
+  </div>
+  <button class="session-trigger" id="session-trigger" type="button" aria-haspopup="true" aria-expanded="false">
+    <span class="label">session</span>
+    <span class="id">today's working session</span>
+    <span class="caret">▾</span>
+  </button>
+  <button class="filter-trigger is-empty" id="filter-trigger" type="button" aria-expanded="false">
+    filter
+    <span class="count">0</span>
+  </button>
+  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
+    <svg class="sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="8" cy="8" r="3"/>
+      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/>
+    </svg>
+    <svg class="moon" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M13 9.5A5.5 5.5 0 0 1 6.5 3 5.5 5.5 0 1 0 13 9.5z"/>
+    </svg>
+  </button>
+</header>
+
+<div class="session-menu" id="session-menu" role="menu" aria-label="Sessions">
+  <div class="menu-head">sessions in BloomList · 4</div>
+  <div class="item is-active" role="menuitem">
+    <div>
+      <div class="title"><span class="pip live"></span>today's working session</div>
+      <div class="sub">9b1c10e8 · 12 turns · started Tue 13 May 09:12</div>
+    </div>
+    <div class="right">live<br>2m ago</div>
+  </div>
+  <div class="item" role="menuitem">
+    <div>
+      <div class="title"><span class="pip stale"></span>orders-csv-export · branch work</div>
+      <div class="sub">4aec67fe · 7 turns · Mon 12 May 16:04 → 18:20</div>
+    </div>
+    <div class="right">stale<br>22h</div>
+  </div>
+  <div class="item" role="menuitem">
+    <div>
+      <div class="title"><span class="pip idle"></span>schema migration spike</div>
+      <div class="sub">f9555703 · 31 turns · Sat 10 May 11:30 → 17:48</div>
+    </div>
+    <div class="right">idle<br>3d</div>
+  </div>
+  <div class="item" role="menuitem">
+    <div>
+      <div class="title"><span class="pip idle"></span>onboarding pass</div>
+      <div class="sub">909ecfe9 · 4 turns · Fri 9 May 14:02 → 14:51</div>
+    </div>
+    <div class="right">idle<br>4d</div>
+  </div>
+</div>
+
+<div class="filter-overlay" id="filter-overlay" aria-hidden="true">
+  <div class="row">
+    <label>status</label>
+    <div class="chips">
+      <button class="chip is-active" data-group="status" data-value="all">all</button>
+      <button class="chip" data-group="status" data-value="completed">completed</button>
+      <button class="chip" data-group="status" data-value="in-progress">in-progress</button>
+      <button class="chip" data-group="status" data-value="failed">failed</button>
+      <button class="chip" data-group="status" data-value="decision">decisions</button>
+    </div>
+  </div>
+  <div class="row">
+    <label>agent</label>
+    <div class="chips">
+      <button class="chip is-active" data-group="agent" data-value="all">all</button>
+      <button class="chip" data-group="agent" data-value="orchestrator">orchestrator</button>
+      <button class="chip" data-group="agent" data-value="founder">founder</button>
+      <button class="chip" data-group="agent" data-value="backend">backend-agent</button>
+      <button class="chip" data-group="agent" data-value="ui">ui-agent</button>
+      <button class="chip" data-group="agent" data-value="tests">tests-agent</button>
+    </div>
+  </div>
+  <div class="row">
+    <label>time</label>
+    <div class="chips">
+      <button class="chip is-active" data-group="time" data-value="all">all</button>
+      <button class="chip" data-group="time" data-value="1h">last 1h</button>
+      <button class="chip" data-group="time" data-value="24h">last 24h</button>
+      <button class="chip" data-group="time" data-value="7d">last 7d</button>
+    </div>
+  </div>
+  <div class="row search">
+    <label>search</label>
+    <input type="text" placeholder="search titles, summaries, file paths…">
+  </div>
+  <div class="row-end">
+    <span><span id="filter-active-count">0</span> filters active</span>
+    <span>
+      <button id="filter-reset">reset</button>
+      <button id="filter-close">close</button>
+    </span>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<main class="feed">
+
+  <!-- ─── Turn 01 — full workflow ─── -->
+  <article class="turn">
+    <div class="turn-meta">
+      <span><span class="status-pip replied"></span><span class="v">replied</span></span>
+      <span><span class="k">started</span> <span class="v">Tue 13 May · 14:32</span></span>
+      <span><span class="k">duration</span> <span class="v">4m 18s</span></span>
+      <span><span class="k">events</span> <span class="v">12</span></span>
+      <span><span class="k">turn</span> <span class="v">t_8f3a4c2b1d</span></span>
+    </div>
+
+    <section class="prompt-hero">
+      <div class="eyebrow">prompt <span class="who">— you, 4m ago</span></div>
+      <h1>Add an opt-in CSV export to the orders page — include status filter, date range, and the per-row totals computed by the existing summary view.</h1>
+      <p class="lede">Match the column order from the customer-facing receipt: <em>order id, placed at, customer, status, items, subtotal, tax, total</em>. Don't break the existing JSON export; this is a separate endpoint.</p>
+    </section>
+
+    <div class="phase">
+      <span class="n">01 ·</span>
+      <h2>Read &amp; locate</h2>
+      <span class="stat"><span class="num">5</span> files · <span class="num">12</span>s</span>
+    </div>
+    <ul class="ledger">
+      <li><span class="t">14:32:04</span><span class="what">app/controllers/orders_controller.rb</span><span class="tag" data-kind="read">read</span></li>
+      <li><span class="t">14:32:06</span><span class="what">app/models/order.rb <span class="dim">· 312 lines</span></span><span class="tag" data-kind="read">read</span></li>
+      <li><span class="t">14:32:08</span><span class="what">app/views/orders/index.html.erb</span><span class="tag" data-kind="read">read</span></li>
+      <li><span class="t">14:32:10</span><span class="what">spec/requests/orders_spec.rb</span><span class="tag" data-kind="read">read</span></li>
+      <li><span class="t">14:32:14</span><span class="what">grep <span class="dim">"to_csv"</span> in app/</span><span class="tag" data-kind="search">search · 3 hits</span></li>
+    </ul>
+
+    <div class="phase">
+      <span class="n">02 ·</span>
+      <h2>Edit &amp; write</h2>
+      <span class="stat"><span class="num">4</span> files · <span class="add">+147</span> <span class="del">−8</span></span>
+    </div>
+    <table class="rollup">
+      <thead><tr><th>file</th><th>change</th><th>at</th></tr></thead>
+      <tbody>
+        <tr><td class="path">app/controllers/orders_controller.rb <span class="dim">action <code style="font-family:var(--font-mono);font-size:11px;">#export</code></span></td><td class="delta"><span class="add">+34</span> <span class="del">−2</span></td><td class="t">14:33:08</td></tr>
+        <tr><td class="path">app/models/order.rb <span class="dim">·to_csv_row helper</span></td><td class="delta"><span class="add">+18</span></td><td class="t">14:33:41</td></tr>
+        <tr><td class="path">config/routes.rb</td><td class="delta"><span class="add">+1</span></td><td class="t">14:33:55</td></tr>
+        <tr><td class="path">spec/requests/orders_spec.rb</td><td class="delta"><span class="add">+94</span> <span class="del">−6</span></td><td class="t">14:34:22</td></tr>
+      </tbody>
+    </table>
+
+    <pre class="excerpt"><span class="meta">--- a/app/controllers/orders_controller.rb</span>
+<span class="meta">+++ b/app/controllers/orders_controller.rb</span>
+<span class="hunk">@@ -42,3 +42,35 @@ <span class="tok-kw">def</span> <span class="tok-fn">index</span></span>
+   <span class="tok-fn">render</span> <span class="tok-sym">:index</span>
+ <span class="tok-kw">end</span>
+<span class="add">+</span>
+<span class="add">+<span class="tok-kw">def</span> <span class="tok-fn">export</span></span>
+<span class="add">+  <span class="tok-fn">authorize!</span> <span class="tok-sym">:read</span>, <span class="tok-const">Order</span></span>
+<span class="add">+  scope = <span class="tok-const">Order</span>.<span class="tok-fn">filter</span>(filter_params).<span class="tok-fn">order</span>(placed_at: <span class="tok-sym">:desc</span>)</span>
+<span class="add">+  <span class="tok-fn">respond_to</span> <span class="tok-kw">do</span> |format|</span>
+<span class="add">+    format.csv { <span class="tok-fn">send_data</span> scope.<span class="tok-fn">to_csv</span>, filename: <span class="tok-str">"orders-#{<span class="tok-const">Date</span>.<span class="tok-fn">today</span>}.csv"</span> }</span>
+<span class="add">+  <span class="tok-kw">end</span></span>
+<span class="add">+<span class="tok-kw">end</span></span></pre>
+
+    <div class="phase">
+      <span class="n">03 ·</span>
+      <h2>Verify</h2>
+      <span class="stat"><span class="num">3</span> commands · <span class="num">0</span> failures</span>
+    </div>
+    <ul class="ledger">
+      <li><span class="t">14:34:38</span><span class="what">bundle exec rspec spec/requests/orders_spec.rb</span><span class="tag" data-kind="bash">14 ex · 0 fail · 0.42s</span></li>
+      <li><span class="t">14:34:54</span><span class="what">bundle exec rubocop app/controllers/orders_controller.rb</span><span class="tag" data-kind="bash">no offences</span></li>
+      <li><span class="t">14:35:11</span><span class="what">curl <span class="dim">localhost:3000/orders.csv?status=paid</span></span><span class="tag" data-kind="bash">200 · 4.1 KB</span></li>
+    </ul>
+
+    <section class="response">
+      <div class="eyebrow">response <span class="who">— Claude, 3m 26s</span></div>
+      <h3>Done. New <code>GET /orders.csv</code> endpoint mirrors the existing index filters and returns the receipt column order.</h3>
+      <p>The JSON export at <code>/orders.json</code> is untouched — the CSV path branches inside <code>respond_to</code> so the wire format is the only difference. All 14 request specs pass, including 8 new ones that cover empty results, paginated CSV (we stream rather than paginate), and the date-range edge cases.</p>
+      <ul>
+        <li>Status filter accepts the same values as the index page (<code>paid</code>, <code>refunded</code>, <code>pending</code>, <code>void</code>).</li>
+        <li>Date range uses <code>placed_at</code>, inclusive on both ends. Times normalised to the account's reporting timezone.</li>
+        <li>Per-row totals come from <code>Order#summary_for_export</code>, extracted from <code>SummaryView</code> so the CSV and on-screen total never drift.</li>
+      </ul>
+      <p>Two things worth flagging before merge: large exports stream chunked, so cancelling the request mid-download leaves a partial file. The CSV is unsigned — if you want downloads to be revocable, we should add a one-shot token.</p>
+    </section>
+  </article>
+
+  <!-- ─── Turn 02 — slash decision ─── -->
+  <article class="turn">
+    <div class="turn-meta">
+      <span><span class="status-pip replied"></span><span class="v">applied</span></span>
+      <span><span class="k">at</span> <span class="v">Tue 13 May · 14:38</span></span>
+      <span><span class="k">events</span> <span class="v">1</span></span>
+      <span><span class="k">kind</span> <span class="v">decision</span></span>
+    </div>
+
+    <section class="prompt-hero decision">
+      <div class="eyebrow">decision <span class="who">— you, just now</span></div>
+      <h1>/think hard about the rate-limit story before the CSV exporter ships</h1>
+    </section>
+  </article>
+
+  <!-- ─── Turn 03 — orchestrator with parallel sub-agents ─── -->
+  <article class="turn">
+    <div class="turn-meta">
+      <span><span class="status-pip replied"></span><span class="v">replied</span></span>
+      <span><span class="k">started</span> <span class="v">Tue 13 May · 14:41</span></span>
+      <span><span class="k">duration</span> <span class="v">6m 12s</span></span>
+      <span><span class="k">events</span> <span class="v">28</span></span>
+      <span><span class="k">turn</span> <span class="v">t_c91e2407aa</span></span>
+    </div>
+
+    <section class="prompt-hero">
+      <div class="eyebrow">prompt <span class="who">— you, 6m ago</span></div>
+      <h1>Roll the CSV exporter behind a feature flag and run a 3-way trial: backend rewrite, UI affordance, and load-test on staging. Parallelize.</h1>
+    </section>
+
+    <div class="phase">
+      <span class="n">01 ·</span>
+      <h2>Plan &amp; dispatch</h2>
+      <span class="stat"><span class="num">3</span> sub-agents · <span class="num">14:41:22</span></span>
+    </div>
+
+    <div class="dispatch">
+      <!-- ── fork stamp + fan-out ── -->
+      <div class="dispatch-stamp">
+        <span class="dot"></span>
+        <span><span class="label">fork</span> · <span class="agent">orchestrator</span> dispatches 3 sub-agents · <span class="at">toolu_91f4</span></span>
+        <span class="at">14:41:22</span>
+      </div>
+      <svg class="dispatch-fan" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
+        <!-- fan-out from x=300, y=0 to lane centers at x=100, 300, 500 (y=60) -->
+        <path d="M300,0 C 300,30  100,30  100,60" stroke="var(--info)"/>
+        <path d="M300,0 C 300,30  300,30  300,60" stroke="var(--apricot-500)"/>
+        <path d="M300,0 C 300,30  500,30  500,60" stroke="var(--sage-500)"/>
+      </svg>
+
+      <!-- ── lanes ── -->
+      <div class="dispatch-lanes">
+        <div class="dispatch-lane is-backend">
+          <div class="name">backend-agent <span class="ts">14:42 → 14:44</span></div>
+          <div class="what">Wrap <code style="font-family:var(--font-mono);font-size:13px;">OrdersController#export</code> with the <code style="font-family:var(--font-mono);font-size:13px;">orders_csv_v2</code> flag check; emit a metric on each format branch.</div>
+          <div class="stat">merged · 4 reads · 2 edits · <span class="add">+22</span> <span class="del">−3</span></div>
+        </div>
+        <div class="dispatch-lane is-ui">
+          <div class="name">ui-agent <span class="ts">14:42 → 14:45</span></div>
+          <div class="what">Add a guarded "Export CSV" button to the orders index; show a coach-mark on first click for accounts in the trial.</div>
+          <div class="stat">merged · 6 reads · 3 edits · <span class="add">+58</span> <span class="del">−1</span></div>
+        </div>
+        <div class="dispatch-lane is-tests">
+          <div class="name">tests-agent <span class="ts">14:45 → 14:47</span></div>
+          <div class="what">Drive a k6 load test against the staging endpoint: 50 RPS for 2 min, mixed status filters, capture p95 + memory.</div>
+          <div class="stat">merged · 1 bash · <span class="add">+0</span> <span class="del">−0</span> · p95 184ms</div>
+        </div>
+      </div>
+
+      <!-- ── fan-in + merge stamp ── -->
+      <svg class="dispatch-fan is-merge" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M300,0 C 300,30  100,30  100,60" stroke="var(--info)"/>
+        <path d="M300,0 C 300,30  300,30  300,60" stroke="var(--apricot-500)"/>
+        <path d="M300,0 C 300,30  500,30  500,60" stroke="var(--sage-500)"/>
+      </svg>
+      <div class="dispatch-stamp is-merge">
+        <span class="dot"></span>
+        <span><span class="label">merge</span> · <span class="agent">orchestrator</span> resumes · 3 lanes settled, <span class="at">+80 −4</span> aggregate</span>
+        <span class="at">14:47:11</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="n">02 ·</span>
+      <h2>Aggregate</h2>
+      <span class="stat"><span class="num">3</span> lanes · <span class="add">+80</span> <span class="del">−4</span> · <span class="num">5</span> files</span>
+    </div>
+    <table class="rollup">
+      <thead><tr><th>lane</th><th>files touched</th><th>change</th></tr></thead>
+      <tbody>
+        <tr><td class="path">backend-agent</td><td>orders_controller.rb · feature_flags.rb</td><td class="delta"><span class="add">+22</span> <span class="del">−3</span></td></tr>
+        <tr><td class="path">ui-agent</td><td>orders/index.html.erb · orders.scss · coach_marks.js</td><td class="delta"><span class="add">+58</span> <span class="del">−1</span></td></tr>
+        <tr><td class="path">tests-agent</td><td>tests/load/csv-export.k6.js <span class="dim">(new)</span></td><td class="delta"><span class="add">+0</span> <span class="del">−0</span></td></tr>
+      </tbody>
+    </table>
+
+    <section class="response">
+      <div class="eyebrow">response <span class="who">— Claude, 6m 12s</span></div>
+      <h3>Trial is wired and the load test is green. The flag <code>orders_csv_v2</code> is off by default; flip it per-account to opt in.</h3>
+      <p>Backend, UI, and load-test ran in parallel after the initial plan. The <strong>backend</strong> branch closed first at 14:44 with the flag check and metric emission. The <strong>UI</strong> branch merged at 14:45 — the button stays hidden when the flag is off, so there's no visual regression for non-trial accounts. The <strong>load test</strong> kicked off as soon as backend handed off and finished at 14:47 with p95 latency at 184 ms and zero 5xx across 6,000 requests.</p>
+      <p>Nothing surprising came out of the dispatch — every lane landed where the plan said it should. The only thing worth pulling into a follow-up is the coach-mark copy, which the UI agent left as placeholder.</p>
+
+      <figure class="shot" aria-label="Mockup of the new Export CSV affordance on the orders index">
+        <div class="frame">
+          <svg viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="shot-title">
+            <title id="shot-title">orders index with the new Export CSV button</title>
+            <!-- background -->
+            <rect x="0" y="0" width="600" height="220" fill="var(--paper)"/>
+            <!-- top bar -->
+            <rect x="0" y="0" width="600" height="36" fill="var(--bone)"/>
+            <circle cx="14" cy="18" r="4" fill="#e85f5f"/>
+            <circle cx="28" cy="18" r="4" fill="#e8b85f"/>
+            <circle cx="42" cy="18" r="4" fill="#5fbf7d"/>
+            <text x="64" y="22" font-family="ui-monospace, var(--font-mono)" font-size="10" fill="var(--mid)">orders · BloomList</text>
+            <!-- page title -->
+            <text x="24" y="74" font-family="ui-serif, var(--font-serif)" font-size="22" fill="var(--ink)">Orders</text>
+            <text x="24" y="92" font-family="ui-sans-serif, var(--font-sans)" font-size="11" fill="var(--mid)">1,284 orders · this month</text>
+            <!-- filter chips -->
+            <rect x="24"  y="110" width="56" height="22" rx="11" fill="var(--ink)"/>
+            <text x="52" y="125" font-family="ui-sans-serif, var(--font-sans)" font-size="10" fill="var(--paper)" text-anchor="middle">all</text>
+            <rect x="86"  y="110" width="62" height="22" rx="11" fill="none" stroke="var(--soft)"/>
+            <text x="117" y="125" font-family="ui-sans-serif, var(--font-sans)" font-size="10" fill="var(--neutral-700)" text-anchor="middle">paid</text>
+            <rect x="154" y="110" width="86" height="22" rx="11" fill="none" stroke="var(--soft)"/>
+            <text x="197" y="125" font-family="ui-sans-serif, var(--font-sans)" font-size="10" fill="var(--neutral-700)" text-anchor="middle">refunded</text>
+            <!-- the new Export CSV button — apricot, leading icon -->
+            <rect x="466" y="106" width="112" height="30" rx="6" fill="var(--apricot-600)"/>
+            <path d="M482 121 v-7 m0 7 -3 -3 m3 3 3 -3 M479 126 h6" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+            <text x="546" y="125" font-family="ui-sans-serif, var(--font-sans)" font-size="11" fill="white" text-anchor="end" font-weight="500">Export CSV</text>
+            <!-- table head -->
+            <line x1="24" y1="156" x2="576" y2="156" stroke="var(--soft)"/>
+            <text x="24"  y="172" font-family="ui-sans-serif, var(--font-sans)" font-size="9" fill="var(--neutral-400)" letter-spacing="0.06em">ORDER</text>
+            <text x="110" y="172" font-family="ui-sans-serif, var(--font-sans)" font-size="9" fill="var(--neutral-400)" letter-spacing="0.06em">PLACED</text>
+            <text x="220" y="172" font-family="ui-sans-serif, var(--font-sans)" font-size="9" fill="var(--neutral-400)" letter-spacing="0.06em">CUSTOMER</text>
+            <text x="360" y="172" font-family="ui-sans-serif, var(--font-sans)" font-size="9" fill="var(--neutral-400)" letter-spacing="0.06em">STATUS</text>
+            <text x="540" y="172" font-family="ui-sans-serif, var(--font-sans)" font-size="9" fill="var(--neutral-400)" letter-spacing="0.06em" text-anchor="end">TOTAL</text>
+            <!-- two table rows hint -->
+            <line x1="24" y1="184" x2="576" y2="184" stroke="var(--soft)" stroke-dasharray="2 3"/>
+            <text x="24"  y="198" font-family="ui-monospace, var(--font-mono)" font-size="10" fill="var(--ink)">#10428</text>
+            <text x="110" y="198" font-family="ui-monospace, var(--font-mono)" font-size="10" fill="var(--mid)">May 12, 09:41</text>
+            <text x="220" y="198" font-family="ui-sans-serif, var(--font-sans)" font-size="10" fill="var(--neutral-700)">Anya P.</text>
+            <text x="360" y="198" font-family="ui-mono, var(--font-mono)" font-size="9" fill="var(--success)" letter-spacing="0.06em">PAID</text>
+            <text x="540" y="198" font-family="ui-monospace, var(--font-mono)" font-size="10" fill="var(--ink)" text-anchor="end">$184.20</text>
+          </svg>
+        </div>
+        <figcaption>Fig 1 · orders index with the new <code style="font-family:var(--font-mono);font-size:11px;">Export CSV</code> affordance · gated by <code style="font-family:var(--font-mono);font-size:11px;">orders_csv_v2</code></figcaption>
+      </figure>
+    </section>
+  </article>
+
+  <!-- ─── Turn 04 — refused / failed ─── -->
+  <article class="turn">
+    <div class="turn-meta">
+      <span><span class="status-pip failed"></span><span class="v">refused</span></span>
+      <span><span class="k">at</span> <span class="v">Tue 13 May · 14:48</span></span>
+      <span><span class="k">duration</span> <span class="v">38s</span></span>
+      <span><span class="k">events</span> <span class="v">4</span></span>
+    </div>
+
+    <section class="prompt-hero">
+      <div class="eyebrow">prompt <span class="who">— you, 28s ago</span></div>
+      <h1>Quick — push the trial to production now, skip the staging soak. Marketing wants the post live by 3pm.</h1>
+    </section>
+
+    <div class="phase">
+      <span class="n">01 ·</span>
+      <h2>Attempted deploy</h2>
+      <span class="stat">stopped at preflight</span>
+    </div>
+    <ul class="ledger">
+      <li><span class="t">14:48:02</span><span class="what">git status</span><span class="tag" data-kind="bash">clean</span></li>
+      <li><span class="t">14:48:06</span><span class="what">bin/preflight --target prod</span><span class="tag fail">exit 2 · soak required</span></li>
+      <li><span class="t">14:48:18</span><span class="what">read .deploy/policy.yml</span><span class="tag" data-kind="read">read</span></li>
+      <li><span class="t">14:48:24</span><span class="what">grep <span class="dim">"production_soak"</span> in .deploy/</span><span class="tag" data-kind="search">search · 2 hits</span></li>
+    </ul>
+
+    <!-- Workflow diagram — boxes & arrows show where the deploy stopped. -->
+    <div class="workflow" aria-label="Deploy pipeline state">
+      <div class="step is-ok"><span class="label">code</span><span class="sub">clean · 14:48</span></div>
+      <span class="arrow">→</span>
+      <div class="step is-ok"><span class="label">CI</span><span class="sub">green · 0.42s</span></div>
+      <span class="arrow">→</span>
+      <div class="step is-fail"><span class="label">stage soak</span><span class="sub">required · missing</span></div>
+      <span class="arrow is-blocked">→</span>
+      <div class="step is-fail"><span class="label">preflight</span><span class="sub">exit 2 · refused</span></div>
+      <span class="arrow is-blocked">→</span>
+      <div class="step is-blocked"><span class="label">prod</span><span class="sub">blocked</span></div>
+    </div>
+
+    <section class="response is-failed">
+      <div class="eyebrow">refused <span class="who">— Claude, 28s ago</span></div>
+      <h3>I'm not going to skip the staging soak.</h3>
+      <p>The deploy policy at <code>.deploy/policy.yml</code> requires a 30-minute soak with p95 latency &lt; 250ms and 0% 5xx before any flagged feature can be promoted. The CSV exporter trial doesn't have a soak record yet — <code>bin/preflight</code> exits 2 and refuses to promote.</p>
+      <p>Two paths from here:</p>
+      <ul>
+        <li><strong>Soak now</strong> — the staging endpoint has been live for 17 minutes. We can kick off the soak immediately and have a green record by 14:55, which still ships before 3pm.</li>
+        <li><strong>Override the gate</strong> — possible via <code>OPS_OVERRIDE=1</code> with a Slack-approved reason. I'd want a second pair of eyes on that, not just me.</li>
+      </ul>
+      <p>Want me to start the soak?</p>
+    </section>
+  </article>
+
+  <!-- ─── Session pulse — spatial / coordinate plot ─── -->
+  <section class="pulse-section" aria-label="Session pulse">
+    <div class="eyebrow">session pulse</div>
+    <h2>Today, at a glance</h2>
+    <svg class="pulse-tape" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-labelledby="pulse-title">
+      <title id="pulse-title">Activity tape: prompts, edits, dispatches, and a refusal plotted over 16 minutes</title>
+      <!-- horizontal axis baseline -->
+      <line x1="0" y1="78" x2="1000" y2="78" stroke="var(--soft)"/>
+      <!-- gridlines at quarter points -->
+      <line x1="250"  y1="14" x2="250"  y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+      <line x1="500"  y1="14" x2="500"  y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+      <line x1="750"  y1="14" x2="750"  y2="78" stroke="var(--soft)" stroke-dasharray="2 4" opacity="0.6"/>
+
+      <!-- Turn 01 region (14:32 → 14:35, x ~ 0–195) -->
+      <rect x="0" y="60" width="195" height="14" rx="2" fill="color-mix(in oklab, var(--apricot-500) 18%, transparent)"/>
+      <text x="6" y="56" font-family="var(--font-mono)" font-size="9" fill="var(--mid)" letter-spacing="0.06em">CSV EXPORTER</text>
+      <!-- events as dots: prompt (apricot big), edits (info), bash (violet) -->
+      <circle cx="4"   cy="67" r="4" fill="var(--apricot-600)"/>
+      <circle cx="22"  cy="67" r="2.5" fill="var(--info)"/>
+      <circle cx="36"  cy="67" r="2.5" fill="var(--info)"/>
+      <circle cx="52"  cy="67" r="2.5" fill="var(--info)"/>
+      <circle cx="68"  cy="67" r="2.5" fill="var(--info)"/>
+      <circle cx="84"  cy="67" r="2.5" fill="var(--info)"/>
+      <circle cx="108" cy="67" r="2.5" fill="var(--apricot-500)"/>
+      <circle cx="124" cy="67" r="2.5" fill="var(--apricot-500)"/>
+      <circle cx="142" cy="67" r="2.5" fill="var(--apricot-500)"/>
+      <circle cx="160" cy="67" r="2.5" fill="var(--apricot-500)"/>
+      <circle cx="178" cy="67" r="3" fill="var(--violet)"/>
+
+      <!-- Turn 02 — slash decision (single dot, apricot, no band) -->
+      <text x="216" y="56" font-family="var(--font-mono)" font-size="9" fill="var(--mid)" letter-spacing="0.06em">/think</text>
+      <circle cx="216" cy="67" r="4" fill="var(--apricot-600)"/>
+
+      <!-- Turn 03 region (14:41 → 14:47, the dispatch) -->
+      <rect x="240" y="60" width="430" height="14" rx="2" fill="color-mix(in oklab, var(--sage-500) 18%, transparent)"/>
+      <text x="246" y="56" font-family="var(--font-mono)" font-size="9" fill="var(--mid)" letter-spacing="0.06em">FLAG TRIAL · 3 LANES</text>
+      <!-- prompt -->
+      <circle cx="240" cy="67" r="4" fill="var(--apricot-600)"/>
+      <!-- fork + lane swatches (top of the band) -->
+      <rect x="252" y="34" width="200" height="3" fill="var(--info)" opacity="0.8"/>
+      <rect x="252" y="40" width="220" height="3" fill="var(--apricot-500)" opacity="0.8"/>
+      <rect x="368" y="46" width="124" height="3" fill="var(--sage-500)" opacity="0.8"/>
+      <!-- merge dot -->
+      <circle cx="492" cy="67" r="3.5" fill="var(--success)"/>
+      <text x="492" y="92" font-family="var(--font-mono)" font-size="8" fill="var(--neutral-400)" text-anchor="middle">merge</text>
+
+      <!-- Turn 04 region (14:48, the refusal) — danger red marker -->
+      <rect x="720" y="60" width="80" height="14" rx="2" fill="color-mix(in oklab, var(--danger) 18%, transparent)"/>
+      <text x="726" y="56" font-family="var(--font-mono)" font-size="9" fill="var(--danger)" letter-spacing="0.06em">REFUSED</text>
+      <circle cx="720" cy="67" r="4" fill="var(--apricot-600)"/>
+      <path d="M758 60 L766 74 M758 74 L766 60" stroke="var(--danger)" stroke-width="1.6" stroke-linecap="round"/>
+
+      <!-- "now" pulse marker at the right edge -->
+      <line x1="990" y1="14" x2="990" y2="78" stroke="var(--apricot-600)" stroke-width="1"/>
+      <circle cx="990" cy="67" r="3" fill="var(--apricot-600)">
+        <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <text x="990" y="10" font-family="var(--font-mono)" font-size="9" fill="var(--apricot-600)" text-anchor="end" letter-spacing="0.06em">NOW</text>
+    </svg>
+    <div class="axis">
+      <span>14:32</span><span>14:36</span><span>14:40</span><span>14:44</span><span>14:48</span>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background: var(--apricot-600);"></span>prompt</span>
+      <span><span class="sw" style="background: var(--info);"></span>read</span>
+      <span><span class="sw" style="background: var(--apricot-500);"></span>edit</span>
+      <span><span class="sw" style="background: var(--violet);"></span>bash</span>
+      <span><span class="sw" style="background: var(--sage-500);"></span>sub-agent lane</span>
+      <span><span class="sw" style="background: var(--success);"></span>merge</span>
+      <span><span class="sw" style="background: var(--danger);"></span>refusal</span>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  const overlay   = document.getElementById('filter-overlay');
+  const overlayBtn= document.getElementById('filter-trigger');
+  const scrim     = document.getElementById('scrim');
+  const closeBtn  = document.getElementById('filter-close');
+  const resetBtn  = document.getElementById('filter-reset');
+  const activeCt  = document.getElementById('filter-active-count');
+  const filterCt  = overlayBtn.querySelector('.count');
+  const sessionBtn = document.getElementById('session-trigger');
+  const sessionMenu= document.getElementById('session-menu');
+
+  function setOverlay(open) {
+    overlay.classList.toggle('is-open', open);
+    overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+    overlayBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    scrim.classList.toggle('is-open', open || sessionMenu.classList.contains('is-open'));
+  }
+  function setMenu(open) {
+    sessionMenu.classList.toggle('is-open', open);
+    sessionBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    scrim.classList.toggle('is-open', open || overlay.classList.contains('is-open'));
+  }
+  function closeAll() { setOverlay(false); setMenu(false); }
+
+  overlayBtn.addEventListener('click', () => {
+    const wasOpen = overlay.classList.contains('is-open');
+    setMenu(false);
+    setOverlay(!wasOpen);
+  });
+  sessionBtn.addEventListener('click', () => {
+    const wasOpen = sessionMenu.classList.contains('is-open');
+    setOverlay(false);
+    setMenu(!wasOpen);
+  });
+  scrim.addEventListener('click', closeAll);
+  closeBtn.addEventListener('click', () => setOverlay(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+
+  const groups = { status: 'all', agent: 'all', time: 'all' };
+  document.querySelectorAll('#filter-overlay .chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = btn.dataset.group, v = btn.dataset.value;
+      groups[g] = v;
+      document.querySelectorAll(`#filter-overlay .chip[data-group="${g}"]`).forEach(c => c.classList.toggle('is-active', c === btn));
+      const active = Object.values(groups).filter(x => x !== 'all').length;
+      activeCt.textContent = active;
+      filterCt.textContent = active;
+      overlayBtn.classList.toggle('is-empty', active === 0);
+    });
+  });
+  resetBtn.addEventListener('click', () => {
+    for (const g of Object.keys(groups)) groups[g] = 'all';
+    document.querySelectorAll('#filter-overlay .chip').forEach(c => c.classList.toggle('is-active', c.dataset.value === 'all'));
+    activeCt.textContent = '0';
+    filterCt.textContent = '0';
+    overlayBtn.classList.add('is-empty');
+  });
+
+  document.querySelectorAll('#session-menu .item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('#session-menu .item').forEach(i => i.classList.remove('is-active'));
+      item.classList.add('is-active');
+      const title = item.querySelector('.title').textContent.trim();
+      sessionBtn.querySelector('.id').textContent = title;
+      setMenu(false);
+    });
+  });
+
+  /* theme toggle */
+  const themeBtn = document.getElementById('theme-toggle');
+  themeBtn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('cadence_design_theme', next); } catch (_) {}
+  });
+
+  /* Lane accordion — click any sub-agent lane to expand it full-width.
+     Siblings collapse to slim summary bars. Click the expanded lane again
+     (or its × hint) to return to the 3-up default. Each dispatch group is
+     independent — clicking a lane only mutex's siblings within the SAME
+     .dispatch-lanes container. */
+  document.querySelectorAll('.dispatch-lanes').forEach(group => {
+    group.addEventListener('click', (e) => {
+      const lane = e.target.closest('.dispatch-lane');
+      if (!lane) return;
+      const wasExpanded = lane.classList.contains('is-expanded');
+      group.querySelectorAll('.dispatch-lane').forEach(l => l.classList.remove('is-expanded'));
+      if (!wasExpanded) lane.classList.add('is-expanded');
+    });
+  });
+</script>
+</body>
+</html>

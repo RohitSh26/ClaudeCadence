@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClaudeCadence · editorial turn prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens (kept in sync with viewer/_design.css) ─────────────── */
+  :root {
+    --ink:        #0a0a0a;
+    --graphite:   #1a1a1a;
+    --paper:      #fafaf7;
+    --bone:       #f0eee9;
+    --soft:       #e8e6e0;
+    --mid:        #6b6b6b;
+    --neutral-300: #d4d2cc;
+    --neutral-400: #a8a6a0;
+    --neutral-700: #2e2e2c;
+
+    --apricot-100: #ffe5d2;
+    --apricot-500: #fb923c;
+    --apricot-600: #c2570b;
+    --apricot-700: #8b3f06;
+
+    --sage-300:   #bcd5b9;
+    --sage-400:   #8db58b;
+    --sage-500:   #5f9763;
+    --sage-bg:    #eef4ec;
+
+    --success:    #2f7a4d;
+    --danger:     #b53d3d;
+
+    --font-sans: 'Geist', 'Inter', -apple-system, system-ui, sans-serif;
+    --font-serif: 'Source Serif 4', Georgia, serif;
+    --font-mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+    --prose-width: 64ch;
+  }
+
+  /* ── Reset / base ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── Page frame ───────────────────────────────────────────────────────── */
+  .frame {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 56px 32px 96px;
+  }
+
+  /* ── Doc header (the page title — minimal, like Thariq's) ─────────────── */
+  .doc-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--soft);
+    padding-bottom: 14px;
+    margin-bottom: 40px;
+    gap: 24px;
+  }
+  .doc-header .brand {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mid);
+  }
+  .doc-header .brand strong { color: var(--ink); font-weight: 500; }
+  .doc-header .doc-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--neutral-400);
+  }
+
+  /* ── Turn metadata strip (the only "chrome" on the whole page) ────────── */
+  .turn-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    letter-spacing: 0.02em;
+    margin-bottom: 22px;
+  }
+  .turn-meta .k { color: var(--neutral-400); }
+  .turn-meta .v { color: var(--neutral-700); }
+  .turn-meta .dot { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--neutral-300); vertical-align: middle; margin: 0 4px; }
+
+  /* ── Prompt hero ──────────────────────────────────────────────────────── */
+  .prompt-hero {
+    margin: 0 0 40px;
+  }
+  .prompt-hero .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--apricot-600);
+    margin-bottom: 14px;
+  }
+  .prompt-hero .eyebrow .who {
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--mid);
+    font-family: var(--font-serif);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .prompt-hero h1 {
+    font-family: var(--font-serif);
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1.25;
+    letter-spacing: -0.012em;
+    margin: 0;
+    max-width: var(--prose-width);
+    color: var(--ink);
+  }
+  .prompt-hero .lede {
+    margin-top: 14px;
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--neutral-700);
+    max-width: var(--prose-width);
+    font-weight: 400;
+  }
+
+  /* ── Phase anchor (the editorial signature: 01 / 02 / 03 …) ───────────── */
+  .phase {
+    margin: 56px 0 18px;
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 18px;
+    align-items: baseline;
+    padding-bottom: 10px;
+    border-bottom: 1px dotted var(--neutral-300);
+  }
+  .phase .n {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    letter-spacing: 0.16em;
+    align-self: start;
+    padding-top: 4px;
+  }
+  .phase h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+    margin: 0;
+    color: var(--ink);
+  }
+  .phase .stat {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mid);
+    white-space: nowrap;
+  }
+  .phase .stat .num { color: var(--neutral-700); }
+  .phase .stat .add { color: var(--success); }
+  .phase .stat .del { color: var(--danger); }
+
+  /* ── Tool-call rollup table (one of his recurring patterns) ───────────── */
+  .rollup {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin: 0 0 8px;
+  }
+  .rollup th, .rollup td {
+    text-align: left;
+    padding: 6px 0;
+    border-bottom: 1px dotted var(--soft);
+    vertical-align: top;
+  }
+  .rollup th {
+    font-weight: 400;
+    color: var(--neutral-400);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding-bottom: 8px;
+    border-bottom-color: var(--neutral-300);
+  }
+  .rollup tr:last-child td { border-bottom: none; }
+  .rollup td.path { color: var(--ink); }
+  .rollup td.path .dim { color: var(--neutral-400); }
+  .rollup td.t { color: var(--mid); font-feature-settings: 'tnum'; }
+  .rollup td.delta .add { color: var(--success); }
+  .rollup td.delta .del { color: var(--danger); }
+  .rollup td.count {
+    color: var(--neutral-700);
+    font-feature-settings: 'tnum';
+  }
+
+  /* ── Inline "ledger" list — used for short reads/searches ─────────────── */
+  .ledger {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--neutral-700);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ledger li {
+    padding: 4px 0;
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 12px;
+    border-bottom: 1px dotted var(--soft);
+  }
+  .ledger li:last-child { border-bottom: none; }
+  .ledger .t { color: var(--mid); font-feature-settings: 'tnum'; }
+  .ledger .what { color: var(--ink); }
+  .ledger .what .dim { color: var(--neutral-400); }
+  .ledger .tag {
+    color: var(--mid);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Diff excerpt (rare; only when the change is small and meaningful) ─ */
+  .excerpt {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    background: var(--bone);
+    border-left: 2px solid var(--neutral-300);
+    padding: 10px 14px;
+    margin: 12px 0 8px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .excerpt .add  { background: color-mix(in oklab, var(--success) 10%, transparent); color: var(--success); display: inline-block; min-width: 100%; }
+  .excerpt .del  { background: color-mix(in oklab, var(--danger) 10%, transparent); color: var(--danger); display: inline-block; min-width: 100%; }
+  .excerpt .hunk { color: var(--apricot-600); }
+  .excerpt .meta { color: var(--mid); }
+
+  /* ── Response band — the only tinted block on the page ────────────────── */
+  .response {
+    margin-top: 56px;
+    padding: 32px 32px 28px;
+    background: var(--sage-bg);
+    border-top: 1px solid var(--sage-300);
+  }
+  .response .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--sage-500);
+    margin-bottom: 12px;
+  }
+  .response .eyebrow .who {
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--neutral-700);
+    font-family: var(--font-serif);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .response h3 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+    margin: 0 0 12px;
+    max-width: var(--prose-width);
+    color: var(--graphite);
+  }
+  .response p {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--neutral-700);
+    margin: 8px 0;
+    max-width: var(--prose-width);
+  }
+  .response ul {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--neutral-700);
+    margin: 12px 0;
+    padding-left: 22px;
+    max-width: var(--prose-width);
+  }
+  .response li { margin-bottom: 4px; }
+  .response code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: color-mix(in oklab, var(--sage-300) 50%, transparent);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--graphite);
+  }
+
+  /* ── Footer (signature, like an article slug) ─────────────────────────── */
+  .doc-footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--soft);
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--neutral-400);
+    letter-spacing: 0.02em;
+  }
+  .doc-footer a { color: var(--mid); text-decoration: none; border-bottom: 1px dotted var(--neutral-300); }
+  .doc-footer a:hover { color: var(--apricot-600); border-bottom-color: var(--apricot-500); }
+
+  /* ── Small screens ────────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .frame { padding: 32px 20px 60px; }
+    .prompt-hero h1 { font-size: 24px; }
+    .prompt-hero .lede { font-size: 16px; }
+    .phase { grid-template-columns: 44px 1fr; gap: 12px; }
+    .phase .stat { grid-column: 2; }
+    .response { margin-left: -20px; margin-right: -20px; padding: 24px 20px; }
+    .ledger li { grid-template-columns: 44px 1fr; }
+    .ledger .tag { grid-column: 2; padding-left: 0; color: var(--neutral-400); font-style: italic; }
+    .rollup th:nth-child(3),
+    .rollup td:nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+  <header class="doc-header">
+    <div class="brand">claude<strong>cadence</strong> · turn</div>
+    <div class="doc-id">t_8f3a4c2b1d · session 9b1c10e8</div>
+  </header>
+
+  <div class="turn-meta">
+    <span><span class="k">started</span> <span class="v">Tue 13 May · 14:32</span></span>
+    <span><span class="k">duration</span> <span class="v">4m 18s</span></span>
+    <span><span class="k">events</span> <span class="v">12</span></span>
+    <span><span class="k">status</span> <span class="v">replied</span></span>
+  </div>
+
+  <!-- ─── Prompt as editorial hero ─────────────────────────────────────── -->
+  <section class="prompt-hero">
+    <div class="eyebrow">prompt <span class="who">— you, 4m ago</span></div>
+    <h1>Add an opt-in CSV export to the orders page — include status filter, date range, and the per-row totals computed by the existing summary view.</h1>
+    <p class="lede">Match the column order from the customer-facing receipt: <em>order id, placed at, customer, status, items, subtotal, tax, total</em>. Don't break the existing JSON export; this is a separate endpoint.</p>
+  </section>
+
+  <!-- ─── Phase 01 ─── -->
+  <div class="phase">
+    <span class="n">01 ·</span>
+    <h2>Read & locate</h2>
+    <span class="stat"><span class="num">5</span> files · <span class="num">12</span>s</span>
+  </div>
+  <ul class="ledger">
+    <li><span class="t">14:32:04</span><span class="what">app/controllers/orders_controller.rb</span><span class="tag">read</span></li>
+    <li><span class="t">14:32:06</span><span class="what">app/models/order.rb <span class="dim">· 312 lines</span></span><span class="tag">read</span></li>
+    <li><span class="t">14:32:08</span><span class="what">app/views/orders/index.html.erb</span><span class="tag">read</span></li>
+    <li><span class="t">14:32:10</span><span class="what">spec/requests/orders_spec.rb</span><span class="tag">read</span></li>
+    <li><span class="t">14:32:14</span><span class="what">grep <span class="dim">"to_csv"</span> in app/</span><span class="tag">search · 3 hits</span></li>
+  </ul>
+
+  <!-- ─── Phase 02 ─── -->
+  <div class="phase">
+    <span class="n">02 ·</span>
+    <h2>Edit &amp; write</h2>
+    <span class="stat"><span class="num">4</span> files · <span class="add">+147</span> <span class="del">−8</span></span>
+  </div>
+
+  <table class="rollup">
+    <thead>
+      <tr><th>file</th><th>change</th><th>at</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="path">app/controllers/orders_controller.rb <span class="dim">action <code style="font-family:var(--font-mono); font-size:11px;">#export</code></span></td>
+        <td class="delta"><span class="add">+34</span> <span class="del">−2</span></td>
+        <td class="t">14:33:08</td>
+      </tr>
+      <tr>
+        <td class="path">app/models/order.rb <span class="dim">·to_csv_row helper</span></td>
+        <td class="delta"><span class="add">+18</span></td>
+        <td class="t">14:33:41</td>
+      </tr>
+      <tr>
+        <td class="path">config/routes.rb</td>
+        <td class="delta"><span class="add">+1</span></td>
+        <td class="t">14:33:55</td>
+      </tr>
+      <tr>
+        <td class="path">spec/requests/orders_spec.rb</td>
+        <td class="delta"><span class="add">+94</span> <span class="del">−6</span></td>
+        <td class="t">14:34:22</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <pre class="excerpt"><span class="meta">--- a/app/controllers/orders_controller.rb</span>
+<span class="meta">+++ b/app/controllers/orders_controller.rb</span>
+<span class="hunk">@@ -42,3 +42,35 @@ def index</span>
+   render :index
+ end
+<span class="add">+</span>
+<span class="add">+def export</span>
+<span class="add">+  authorize! :read, Order</span>
+<span class="add">+  scope = Order.filter(filter_params).order(placed_at: :desc)</span>
+<span class="add">+  respond_to do |format|</span>
+<span class="add">+    format.csv { send_data scope.to_csv, filename: "orders-#{Date.today}.csv" }</span>
+<span class="add">+  end</span>
+<span class="add">+end</span></pre>
+
+  <!-- ─── Phase 03 ─── -->
+  <div class="phase">
+    <span class="n">03 ·</span>
+    <h2>Verify</h2>
+    <span class="stat"><span class="num">3</span> commands · <span class="num">0</span> failures</span>
+  </div>
+  <ul class="ledger">
+    <li><span class="t">14:34:38</span><span class="what">bundle exec rspec spec/requests/orders_spec.rb</span><span class="tag">14 ex · 0 fail · 0.42s</span></li>
+    <li><span class="t">14:34:54</span><span class="what">bundle exec rubocop app/controllers/orders_controller.rb</span><span class="tag">no offences</span></li>
+    <li><span class="t">14:35:11</span><span class="what">curl <span class="dim">localhost:3000/orders.csv?status=paid</span></span><span class="tag">200 · 4.1 KB</span></li>
+  </ul>
+
+  <!-- ─── Response as a tinted band ─────────────────────────────────────── -->
+  <section class="response">
+    <div class="eyebrow">response <span class="who">— Claude, 3m 26s</span></div>
+    <h3>Done. New <code>GET /orders.csv</code> endpoint mirrors the existing index filters and returns the receipt column order.</h3>
+    <p>The JSON export at <code>/orders.json</code> is untouched — the CSV path branches inside <code>respond_to</code> so the wire format is the only difference. All 14 request specs pass, including 8 new ones that cover empty results, paginated CSV (we stream rather than paginate), and the date-range edge cases.</p>
+    <ul>
+      <li>Status filter accepts the same values as the index page (<code>paid</code>, <code>refunded</code>, <code>pending</code>, <code>void</code>).</li>
+      <li>Date range uses <code>placed_at</code>, inclusive on both ends. Times are normalised to the account's reporting timezone.</li>
+      <li>Per-row totals come from <code>Order#summary_for_export</code>, which I extracted from the existing <code>SummaryView</code> so the CSV and the on-screen total never drift.</li>
+    </ul>
+    <p>Two things worth flagging before merge: large exports stream chunked, so cancelling the request mid-download leaves a partial file. And the CSV is unsigned — if you want a download to be revocable, we should add a one-shot token at the endpoint.</p>
+  </section>
+
+  <footer class="doc-footer">
+    <span>watched by claudecadence · v2.3.2</span>
+    <span><a href="#">turn before ←</a> &nbsp; <a href="#">turn after →</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
